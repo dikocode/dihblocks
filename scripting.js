@@ -23,16 +23,86 @@
     'when', 'var', 'set', 'to', 'random'
   ]);
 
+  // FIXED: Better tokenizer that handles quoted strings properly
   function tokenizeDihlang(source) {
     const tokens = [];
-    const lines = source.split(/\r?\n/);
-    for (let line of lines) {
-      const c = line.trim();
-      if (!c || c.startsWith('#')) continue;
-      // Simple tokenization: split by whitespace, keep strings together.
-      const tks = c.match(/"[^"]*"|[^\s"]+/g) || [];
-      tokens.push(...tks);
+    let i = 0;
+    const s = source;
+    
+    while (i < s.length) {
+      const ch = s[i];
+      
+      // Skip whitespace
+      if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') {
+        i++;
+        continue;
+      }
+      
+      // Skip comments
+      if (ch === '#') {
+        while (i < s.length && s[i] !== '\n') i++;
+        continue;
+      }
+      
+      // Handle quoted strings
+      if (ch === '"' || ch === "'") {
+        const quote = ch;
+        i++; // Skip opening quote
+        let str = '';
+        while (i < s.length && s[i] !== quote) {
+          if (s[i] === '\\' && i + 1 < s.length) {
+            str += s[i + 1];
+            i += 2;
+          } else {
+            str += s[i];
+            i++;
+          }
+        }
+        i++; // Skip closing quote
+        tokens.push('"' + str + '"');
+        continue;
+      }
+      
+      // Handle parentheses and commas as separate tokens
+      if (ch === '(' || ch === ')' || ch === ',') {
+        tokens.push(ch);
+        i++;
+        continue;
+      }
+      
+      // Handle operators as separate tokens
+      if (ch === '>' || ch === '<' || ch === '=' || ch === '!') {
+        let op = ch;
+        i++;
+        if (i < s.length && (s[i] === '=' || s[i] === '>')) {
+          op += s[i];
+          i++;
+        }
+        tokens.push(op);
+        continue;
+      }
+      
+      // Handle numbers and identifiers
+      let token = '';
+      while (i < s.length && 
+             !(s[i] === ' ' || s[i] === '\t' || s[i] === '\r' || s[i] === '\n' ||
+               s[i] === '(' || s[i] === ')' || s[i] === ',' ||
+               s[i] === '>' || s[i] === '<' || s[i] === '=' || s[i] === '!' ||
+               s[i] === '"' || s[i] === "'")) {
+        token += s[i];
+        i++;
+      }
+      
+      if (token) {
+        // Check if it's a number
+        if (!isNaN(Number(token))) {
+          tokens.push(token);
+        } else {
+          tokens.push(token);
+        }
+      }
     }
+    
     return tokens;
   }
 
@@ -42,42 +112,83 @@
       this.pos = 0;
       this.blocks = [];
     }
-    peek(offset = 0) { return this.tokens[this.pos + offset]; }
-    consume() { return this.tokens[this.pos++]; }
+    peek(offset = 0) { return this.tokens[this.pos + offset] || null; }
+    consume() { return this.tokens[this.pos++] || null; }
     parse() {
+      this.blocks = [];
       while (this.pos < this.tokens.length) {
         const block = this.parseStatement();
         if (block) this.blocks.push(block);
+        // Skip any stray closing parens or commas
+        while (this.peek() === ')' || this.peek() === ',') {
+          this.consume();
+        }
       }
       return this.blocks;
     }
+    
     parseStatement() {
       const tok = this.peek();
       if (!tok) return null;
+      
+      // Skip standalone parentheses and commas
+      if (tok === ')' || tok === ',') {
+        this.consume();
+        return null;
+      }
+      
       if (tok === 'end') { this.consume(); return null; }
-      if (tok === 'else') return null; // handled by if
+      if (tok === 'else') { this.consume(); return null; }
       if (tok === 'loop') return this.parseLoop();
       if (tok === 'if') return this.parseIf();
       if (tok === 'var') return this.parseVar();
       if (tok === 'set') return this.parseSet();
       if (tok === 'when') return this.parseWhen();
+      
       // Action commands
-      if (['move','rotate','color','size','wait','create','destroy','say','play','stop'].includes(tok)) {
+      if (['move', 'rotate', 'color', 'size', 'wait', 'create', 'destroy', 'say', 'play', 'stop'].includes(tok)) {
         return this.parseAction(tok);
       }
-      // Unknown identifier: treat as command with arguments until keyword boundary
+      
+      // Unknown identifier: treat as command with arguments
       return this.parseAction(tok);
     }
+    
     parseAction(name) {
-      this.consume();
+      this.consume(); // consume the command name
       const args = [];
-      while (this.pos < this.tokens.length) {
-        const t = this.peek();
-        if (DIHLANG_KEYWORDS.has(t) && t !== 'true' && t !== 'false' && t !== 'random') break;
-        args.push(this.parseValue(this.consume()));
+      
+      // Expect '('
+      if (this.peek() === '(') {
+        this.consume(); // consume '('
       }
-      return { type: 'action', name, args, line: this.pos };
+      
+      // Parse arguments until we hit ')' or end of line
+      let next = this.peek();
+      while (next && next !== ')' && next !== ',' && !DIHLANG_KEYWORDS.has(next)) {
+        const arg = this.parseValue(next);
+        if (arg !== null) {
+          args.push(arg);
+          this.consume(); // consume the token
+        } else {
+          break;
+        }
+        next = this.peek();
+        // Skip commas
+        if (next === ',') {
+          this.consume(); // consume ','
+          next = this.peek();
+        }
+      }
+      
+      // Skip closing ')'
+      if (this.peek() === ')') {
+        this.consume();
+      }
+      
+      return { type: 'action', name, args };
     }
+    
     parseLoop() {
       this.consume(); // loop
       const count = this.parseValue(this.consume());
@@ -89,6 +200,7 @@
       if (this.peek() === 'end') this.consume();
       return { type: 'loop', count, body };
     }
+    
     parseIf() {
       this.consume(); // if
       const condition = this.parseCondition();
@@ -104,6 +216,7 @@
       if (this.peek() === 'end') this.consume();
       return { type: 'if', condition, thenBranch, elseBranch };
     }
+    
     parseVar() {
       this.consume(); // var
       const name = this.consume();
@@ -111,6 +224,7 @@
       if (this.peek() === 'to') { this.consume(); value = this.parseValue(this.consume()); }
       return { type: 'var', name, value };
     }
+    
     parseSet() {
       this.consume(); // set
       const name = this.consume();
@@ -118,6 +232,7 @@
       const value = this.parseValue(this.consume());
       return { type: 'set', name, value };
     }
+    
     parseWhen() {
       this.consume(); // when
       const event = this.consume(); // e.g. start, touch, tick
@@ -129,6 +244,7 @@
       if (this.peek() === 'end') this.consume();
       return { type: 'when', event, body };
     }
+    
     parseCondition() {
       // simple condition: a op b [and/or c op d]
       const left = this.parseValue(this.consume());
@@ -144,6 +260,7 @@
       }
       return { left, op, right, chain };
     }
+    
     parseValue(token) {
       if (!token) return 0;
       if (token === 'true') return true;
@@ -154,6 +271,7 @@
       }
       if (!isNaN(Number(token))) return Number(token);
       if (token.startsWith('"') && token.endsWith('"')) return token.slice(1, -1);
+      if (token.startsWith("'") && token.endsWith("'")) return token.slice(1, -1);
       return { type: 'var', name: token };
     }
   }
@@ -166,13 +284,18 @@
       this.running = false;
       this.pending = [];
     }
+    
     async run(source) {
       const tokens = tokenizeDihlang(source);
+      console.log('DIHLANG TOKENS:', tokens);
       const parser = new DihlangParser(tokens);
       const blocks = parser.parse();
+      console.log('DIHLANG BLOCKS:', JSON.stringify(blocks, null, 2));
+      
       this.vars = {};
       this.handlers = { start: [], touch: [], tick: [], jump: [] };
       this.running = true;
+      
       for (const block of blocks) {
         if (block.type === 'when') {
           (this.handlers[block.event] || []).push(...block.body);
@@ -180,15 +303,18 @@
           await this.exec(block);
         }
       }
+      
       // Fire start event
       if (this.handlers.start.length) {
         for (const b of this.handlers.start) await this.exec(b);
       }
     }
+    
     stop() {
       this.running = false;
       this.pending = [];
     }
+    
     async exec(block) {
       if (!this.running) return;
       switch (block.type) {
@@ -208,8 +334,10 @@
         }
         case 'var': this.vars[block.name] = this.resolve(block.value); return;
         case 'set': this.vars[block.name] = this.resolve(block.value); return;
+        case 'when': return; // handled separately
       }
     }
+    
     execAction(block) {
       const args = block.args.map(a => this.resolve(a));
       const api = this.api;
@@ -228,9 +356,11 @@
       }
       return Promise.resolve();
     }
+    
     wait(seconds) {
       return new Promise(r => setTimeout(r, seconds * 1000));
     }
+    
     evalCondition(cond) {
       const l = this.resolve(cond.left);
       const r = this.resolve(cond.right);
@@ -243,6 +373,7 @@
       }
       return ok;
     }
+    
     compare(a, op, b) {
       switch (op) {
         case '>': return a > b;
@@ -255,6 +386,7 @@
         default: return a == b;
       }
     }
+    
     resolve(value) {
       if (value && typeof value === 'object') {
         if (value.type === 'var') return this.vars[value.name] || 0;
@@ -262,13 +394,14 @@
       }
       return value;
     }
+    
     onEvent(name) {
       const list = this.handlers[name] || [];
       if (!list.length) return;
       for (const b of list) this.exec(b);
     }
+    
     toBlocks(source) {
-      // Convert source to block JSON for visual editor.
       const tokens = tokenizeDihlang(source);
       const parser = new DihlangParser(tokens);
       return parser.parse();
@@ -425,21 +558,29 @@
       this.active = null;
       this.currentSource = { dihlang: '', python: '', js: '' };
     }
+    
     async run(language, source) {
       this.currentSource[language] = source;
       this.stop();
       this.active = language;
       this.api.onLog(`Running ${language}…`);
-      if (language === 'dihlang') await this.dihlang.run(source);
-      else if (language === 'python') await this.python.run(source);
-      else if (language === 'js') await this.js.run(source);
+      try {
+        if (language === 'dihlang') await this.dihlang.run(source);
+        else if (language === 'python') await this.python.run(source);
+        else if (language === 'js') await this.js.run(source);
+      } catch (e) {
+        this.api.onError(`Script error: ${e.message}`);
+        console.error(e);
+      }
     }
+    
     stop() {
       this.dihlang.stop();
       this.python.stop();
       this.js.stop();
       this.active = null;
     }
+    
     getKeywords() { return Array.from(DIHLANG_KEYWORDS); }
     parseBlocks(source) { return this.dihlang.toBlocks(source); }
     onGameEvent(name) { this.dihlang.onEvent(name); }
