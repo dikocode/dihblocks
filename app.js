@@ -28,18 +28,18 @@ const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
 /* ══════════════════════════════════════════════════════════
    CONSTANTS & CONFIG
    ══════════════════════════════════════════════════════════ */
-const TILE_SIZE    = 40;
+let TILE_SIZE    = 40;
 let GRAVITY      = 0.55;
-const JUMP_FORCE   = -13.5;
-const MOVE_SPEED   = 4.5;
-const MAX_FALL_SPD = 18;
-const LERP_FACTOR  = 0.18;
-const SYNC_RATE_MS = 40;           // 25Hz position broadcast
-const CHANNEL_NAME = 'dihblocks-world-v1';
-const DANCE_DURATION = 3500;
-const INTERP_DELAY_MS = 100;       // remote player interpolation delay
-const CHAT_BATCH_MS = 60000;       // batch messages within 60s
-const MAX_CHAT_HISTORY = 200;
+let JUMP_FORCE   = -13.5;
+let MOVE_SPEED   = 4.5;
+let MAX_FALL_SPD = 18;
+let LERP_FACTOR  = 0.18;
+let SYNC_RATE_MS = 40;           // 25Hz position broadcast
+let CHANNEL_NAME = 'dihblocks-world-v1';
+let DANCE_DURATION = 3500;
+let INTERP_DELAY_MS = 100;       // remote player interpolation delay
+let CHAT_BATCH_MS = 60000;       // batch messages within 60s
+let MAX_CHAT_HISTORY = 200;
 
 const TILE_CONFIG = {
   ground:   { color: '#5c8a3c', solid: true,  hazard: false, bounce: false, ice: false },
