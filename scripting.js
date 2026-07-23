@@ -3,7 +3,7 @@
  * Multi-language sandboxed scripting engine for the browser game.
  *
  * Runtimes:
- *   - Dihlang: custom visual/text language with 25 core keywords.
+ *   - Dihlang: custom visual/text language with 30+ core keywords (including physics).
  *   - Python:  transpiled subset bound to game object APIs.
  *   - JS:      raw sandboxed JS with injected game API and UI helpers.
  */
@@ -14,13 +14,22 @@
      DIHLANG RUNTIME
      ============================================================ */
 
-  // Exactly 25 core keywords.
+  // 30+ core keywords (including physics controls)
   const DIHLANG_KEYWORDS = new Set([
-    'move', 'rotate', 'color', 'size', 'wait',
-    'loop', 'if', 'else', 'end', 'and',
-    'or', 'not', 'true', 'false', 'play',
-    'stop', 'create', 'destroy', 'say', 'event',
-    'when', 'var', 'set', 'to', 'random'
+    // Movement & physics
+    'move', 'rotate', 'gravity', 'jumpForce', 'moveSpeed', 'friction', 'size', 'color',
+    // Communication
+    'say', 'play', 'stop',
+    // Building
+    'create', 'destroy',
+    // Flow control
+    'loop', 'if', 'else', 'end', 'wait',
+    // Logic & values
+    'and', 'or', 'not', 'true', 'false', 'random',
+    // Variables
+    'var', 'set', 'to',
+    // Events
+    'when', 'event'
   ]);
 
   // FIXED: Better tokenizer that handles quoted strings properly
@@ -32,22 +41,19 @@
     while (i < s.length) {
       const ch = s[i];
       
-      // Skip whitespace
       if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') {
         i++;
         continue;
       }
       
-      // Skip comments
       if (ch === '#') {
         while (i < s.length && s[i] !== '\n') i++;
         continue;
       }
       
-      // Handle quoted strings
       if (ch === '"' || ch === "'") {
         const quote = ch;
-        i++; // Skip opening quote
+        i++;
         let str = '';
         while (i < s.length && s[i] !== quote) {
           if (s[i] === '\\' && i + 1 < s.length) {
@@ -58,19 +64,17 @@
             i++;
           }
         }
-        i++; // Skip closing quote
+        i++;
         tokens.push('"' + str + '"');
         continue;
       }
       
-      // Handle parentheses and commas as separate tokens
       if (ch === '(' || ch === ')' || ch === ',') {
         tokens.push(ch);
         i++;
         continue;
       }
       
-      // Handle operators as separate tokens
       if (ch === '>' || ch === '<' || ch === '=' || ch === '!') {
         let op = ch;
         i++;
@@ -82,7 +86,6 @@
         continue;
       }
       
-      // Handle numbers and identifiers
       let token = '';
       while (i < s.length && 
              !(s[i] === ' ' || s[i] === '\t' || s[i] === '\r' || s[i] === '\n' ||
@@ -94,7 +97,6 @@
       }
       
       if (token) {
-        // Check if it's a number
         if (!isNaN(Number(token))) {
           tokens.push(token);
         } else {
@@ -119,7 +121,6 @@
       while (this.pos < this.tokens.length) {
         const block = this.parseStatement();
         if (block) this.blocks.push(block);
-        // Skip any stray closing parens or commas
         while (this.peek() === ')' || this.peek() === ',') {
           this.consume();
         }
@@ -131,7 +132,6 @@
       const tok = this.peek();
       if (!tok) return null;
       
-      // Skip standalone parentheses and commas
       if (tok === ')' || tok === ',') {
         this.consume();
         return null;
@@ -145,43 +145,40 @@
       if (tok === 'set') return this.parseSet();
       if (tok === 'when') return this.parseWhen();
       
-      // Action commands
-      if (['move', 'rotate', 'color', 'size', 'wait', 'create', 'destroy', 'say', 'play', 'stop'].includes(tok)) {
+      // Actions (including physics)
+      if (['move','rotate','color','size','wait','create','destroy','say','play','stop',
+           'gravity','jumpForce','moveSpeed','friction'].includes(tok)) {
         return this.parseAction(tok);
       }
       
-      // Unknown identifier: treat as command with arguments
+      // Unknown identifier: treat as command
       return this.parseAction(tok);
     }
     
     parseAction(name) {
-      this.consume(); // consume the command name
+      this.consume();
       const args = [];
       
-      // Expect '('
       if (this.peek() === '(') {
-        this.consume(); // consume '('
+        this.consume();
       }
       
-      // Parse arguments until we hit ')' or end of line
       let next = this.peek();
       while (next && next !== ')' && next !== ',' && !DIHLANG_KEYWORDS.has(next)) {
         const arg = this.parseValue(next);
         if (arg !== null) {
           args.push(arg);
-          this.consume(); // consume the token
+          this.consume();
         } else {
           break;
         }
         next = this.peek();
-        // Skip commas
         if (next === ',') {
-          this.consume(); // consume ','
+          this.consume();
           next = this.peek();
         }
       }
       
-      // Skip closing ')'
       if (this.peek() === ')') {
         this.consume();
       }
@@ -190,7 +187,7 @@
     }
     
     parseLoop() {
-      this.consume(); // loop
+      this.consume();
       const count = this.parseValue(this.consume());
       const body = [];
       while (this.pos < this.tokens.length && this.peek() !== 'end') {
@@ -202,7 +199,7 @@
     }
     
     parseIf() {
-      this.consume(); // if
+      this.consume();
       const condition = this.parseCondition();
       const thenBranch = [];
       const elseBranch = [];
@@ -218,7 +215,7 @@
     }
     
     parseVar() {
-      this.consume(); // var
+      this.consume();
       const name = this.consume();
       let value = 0;
       if (this.peek() === 'to') { this.consume(); value = this.parseValue(this.consume()); }
@@ -226,7 +223,7 @@
     }
     
     parseSet() {
-      this.consume(); // set
+      this.consume();
       const name = this.consume();
       if (this.peek() === 'to') this.consume();
       const value = this.parseValue(this.consume());
@@ -234,8 +231,8 @@
     }
     
     parseWhen() {
-      this.consume(); // when
-      const event = this.consume(); // e.g. start, touch, tick
+      this.consume();
+      const event = this.consume();
       const body = [];
       while (this.pos < this.tokens.length && this.peek() !== 'end') {
         const st = this.parseStatement();
@@ -246,7 +243,6 @@
     }
     
     parseCondition() {
-      // simple condition: a op b [and/or c op d]
       const left = this.parseValue(this.consume());
       const op = this.consume();
       const right = this.parseValue(this.consume());
@@ -287,10 +283,8 @@
     
     async run(source) {
       const tokens = tokenizeDihlang(source);
-      console.log('DIHLANG TOKENS:', tokens);
       const parser = new DihlangParser(tokens);
       const blocks = parser.parse();
-      console.log('DIHLANG BLOCKS:', JSON.stringify(blocks, null, 2));
       
       this.vars = {};
       this.handlers = { start: [], touch: [], tick: [], jump: [] };
@@ -304,7 +298,6 @@
         }
       }
       
-      // Fire start event
       if (this.handlers.start.length) {
         for (const b of this.handlers.start) await this.exec(b);
       }
@@ -334,7 +327,7 @@
         }
         case 'var': this.vars[block.name] = this.resolve(block.value); return;
         case 'set': this.vars[block.name] = this.resolve(block.value); return;
-        case 'when': return; // handled separately
+        case 'when': return;
       }
     }
     
@@ -352,6 +345,11 @@
         case 'say': api.say(String(args[0] || '')); break;
         case 'play': api.playSound(args[0] || 'beep'); break;
         case 'stop': api.stopSound(args[0]); break;
+        // Physics
+        case 'gravity': api.gravity(args[0] || 0.55); break;
+        case 'jumpForce': api.jumpForce(args[0] || -13.5); break;
+        case 'moveSpeed': api.moveSpeed(args[0] || 4.5); break;
+        case 'friction': api.friction(args[0] || 0.78); break;
         default: api.custom(block.name, args); break;
       }
       return Promise.resolve();
@@ -422,7 +420,7 @@
       let prevIndent = 0;
       for (let i = 0; i < lines.length; i++) {
         const raw = lines[i];
-        const line = raw.replace(/#.*$/, ''); // strip comments
+        const line = raw.replace(/#.*$/, '');
         const indent = raw.length - raw.trimStart().length;
         if (!line.trim()) continue;
         while (indent < prevIndent) { out += '}\n'; prevIndent -= 2; }
@@ -445,23 +443,17 @@
         if (head.startsWith('while ')) return `while (${this.expr(head.slice(6))}) {`;
         return `if (${this.expr(head)}) {`;
       }
-      // Assignment
       const assign = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/);
       if (assign) {
         return `let ${assign[1]} = ${this.expr(assign[2])};`;
       }
-      // Method call on object
       return this.expr(line) + ';';
     }
     expr(s) {
       s = s.trim();
-      // Translate Python and/or to JS &&/||
       s = s.replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/\bnot\b/g, '!');
-      // Translate print -> api.say
       s = s.replace(/\bprint\s*\(/g, 'api.say(');
-      // Wait
       s = s.replace(/\bwait\s*\(/g, 'await api.wait(');
-      // Image filters
       s = s.replace(/\bimage\.\w+/g, m => `api.${m}`);
       return s;
     }
