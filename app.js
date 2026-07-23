@@ -921,6 +921,101 @@ const chat = {
    SCRIPTING INTEGRATION
    ══════════════════════════════════════════════════════════ */
 let scriptEngine = null;
+const SCRIPT_REFERENCE = {
+  python: [
+    ["move(x, y)", "Move the player"],
+    ["rotate(deg)", "Rotate an object"],
+    ["color('#ff0000')", "Change player color"],
+    ["size(w, h)", "Resize player"],
+    ["create(type,x,y)", "Create an object"],
+    ["destroy(id)", "Destroy an object"],
+    ["say('Hello')", "Send a chat message"],
+    ["playSound(name)", "Play a sound"],
+    ["image.load(url)", "Load a shirt image"],
+    ["game.getPlayer()", "Get local player"],
+    ["game.getMap()", "Get current map"],
+    ["ui.createPanel(html)", "Create a UI panel"]
+  ],
+
+  javascript: [
+    ["move(10,0);", "Move the player"],
+    ["rotate(90);", "Rotate object"],
+    ["say('Hello');", "Chat"],
+    ["create('block',100,100);", "Spawn object"],
+    ["destroy(id);", "Destroy object"]
+  ],
+
+  dihlang: [
+    ["move 10 0", "Move player"],
+    ["rotate 90", "Rotate"],
+    ["say Hello", "Chat"],
+    ["create block 100 100", "Spawn object"],
+    ["destroy block1", "Destroy object"]
+  ]
+};
+
+function openScriptReference(language = "python") {
+
+  let win = document.getElementById("script-reference");
+
+  if (!win) {
+    win = document.createElement("div");
+    win.id = "script-reference";
+
+    win.style.position = "fixed";
+    win.style.right = "20px";
+    win.style.top = "90px";
+    win.style.width = "330px";
+    win.style.height = "500px";
+    win.style.background = "#1a1a1a";
+    win.style.border = "1px solid #555";
+    win.style.borderRadius = "8px";
+    win.style.overflow = "auto";
+    win.style.padding = "10px";
+    win.style.zIndex = "99999";
+
+    document.body.appendChild(win);
+  }
+
+  const list = SCRIPT_REFERENCE[language] || [];
+
+  win.innerHTML =
+    `<h2>${language} Keywords</h2><hr>`;
+
+  list.forEach(cmd => {
+
+    const div = document.createElement("div");
+
+    div.style.padding = "6px";
+    div.style.marginBottom = "6px";
+    div.style.cursor = "pointer";
+    div.style.borderBottom = "1px solid #333";
+
+    div.innerHTML =
+      `<b>${cmd[0]}</b><br><small>${cmd[1]}</small>`;
+
+    div.onclick = () => {
+
+      const editor =
+        document.getElementById("script-editor");
+
+      if (!editor) return;
+
+      const start = editor.selectionStart;
+
+      editor.value =
+        editor.value.slice(0,start)
+        + cmd[0]
+        + editor.value.slice(start);
+
+      editor.focus();
+    };
+
+    win.appendChild(div);
+
+  });
+
+}
 function initScripting() {
   const api = {
     move: (x, y) => {
