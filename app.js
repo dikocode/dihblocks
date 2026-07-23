@@ -32,7 +32,7 @@
 /* ══════════════════════════════════════════════════════════
    SUPABASE INIT
 ══════════════════════════════════════════════════════════ */
-const SUPABASE_URL = 'https://blgfhukweibzkasamicm.supabase.co/rest/v1/';
+const SUPABASE_URL = 'https://blgfhukweibzkasamicm.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJsZ2ZodWt3ZWliemthc2FtaWNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4MjE4NjksImV4cCI6MjEwMDM5Nzg2OX0.i0JQYIC4oahxMNVcJkMYNJVCRu_dkSsqIRpsJKd7Ycc';
 // Note: Replace SUPABASE_KEY above with your actual anon/public key from Supabase dashboard
 // The key above uses the publishable key format provided. If auth fails, update with eyJ... JWT from project settings.
