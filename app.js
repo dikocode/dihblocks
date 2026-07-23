@@ -1,18 +1,6 @@
 /**
  * DIHBLOCKS — app.js
  * Production 2D real-time multiplayer browser game engine.
- *
- * Architecture:
- *   - StateManager: centralized mutable state
- *   - MapSystem:    load/save/apply maps, baseplate generation
- *   - Player:      local + remote player entity
- *   - Physics:      deterministic tile-based physics
- *   - Renderer:    canvas rendering
- *   - Network:     Supabase realtime with interpolation + delta compression
- *   - Editor:      tile editing + creator studio
- *   - Home:        map browser + world creation
- *   - Chat:        batched messaging with scroll lock
- *   - Scripting:   integration with scripting.js runtimes
  */
 'use strict';
 
@@ -26,7 +14,7 @@ const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 /* ══════════════════════════════════════════════════════════
-   CONSTANTS & CONFIG (ALL MUTABLE NOW)
+   CONSTANTS & CONFIG
    ══════════════════════════════════════════════════════════ */
 let TILE_SIZE    = 40;
 let GRAVITY      = 0.55;
@@ -34,13 +22,13 @@ let JUMP_FORCE   = -13.5;
 let MOVE_SPEED   = 4.5;
 let MAX_FALL_SPD = 18;
 let LERP_FACTOR  = 0.18;
-let SYNC_RATE_MS = 40;           // 25Hz position broadcast
+let SYNC_RATE_MS = 40;
 let CHANNEL_NAME = 'dihblocks-world-v1';
 let DANCE_DURATION = 3500;
-let INTERP_DELAY_MS = 100;       // remote player interpolation delay
-let CHAT_BATCH_MS = 60000;       // batch messages within 60s
+let INTERP_DELAY_MS = 100;
+let CHAT_BATCH_MS = 60000;
 let MAX_CHAT_HISTORY = 200;
-let GROUND_FRICTION = 0.78;      // ADDED FOR DIHLANG FRICTION CONTROL
+let GROUND_FRICTION = 0.78;
 
 const TILE_CONFIG = {
   ground:   { color: '#5c8a3c', solid: true,  hazard: false, bounce: false, ice: false },
@@ -212,7 +200,7 @@ class Player {
 class RemotePlayer extends Player {
   constructor(x, y, username, appearance) {
     super(x, y, username, appearance);
-    this.buffer = []; // { ts, x, y, vx, vy, animState, facing, isDancing }
+    this.buffer = [];
     this.renderX = x; this.renderY = y;
     this.lastState = null;
   }
@@ -222,7 +210,6 @@ class RemotePlayer extends Player {
   }
   interpolate(now) {
     const renderTs = now - INTERP_DELAY_MS;
-    // Find two surrounding states
     let nextIdx = this.buffer.findIndex(s => s.ts >= renderTs);
     if (nextIdx === -1) nextIdx = this.buffer.length - 1;
     if (nextIdx <= 0) {
@@ -237,7 +224,6 @@ class RemotePlayer extends Player {
     const next = this.buffer[nextIdx];
     const t = (renderTs - prev.ts) / (next.ts - prev.ts);
     const clamped = Math.max(0, Math.min(1, t));
-    // Apply dead reckoning using velocity
     const dt = (renderTs - prev.ts) / 1000;
     this.renderX = lerp(prev.x + prev.vx * dt, next.x, clamped);
     this.renderY = lerp(prev.y + prev.vy * dt, next.y, clamped);
@@ -250,7 +236,7 @@ class RemotePlayer extends Player {
 function lerp(a, b, t) { return a + (b - a) * t; }
 
 /* ══════════════════════════════════════════════════════════
-   PHYSICS (UPDATED TO USE MUTABLE VARIABLES)
+   PHYSICS
    ══════════════════════════════════════════════════════════ */
 function resolvePlayerPhysics(p, dt) {
   if (p.isDead) {
@@ -270,7 +256,7 @@ function resolvePlayerPhysics(p, dt) {
   const btx1 = Math.floor((p.x + p.w - 1) / TILE_SIZE);
   const bty  = Math.floor((p.y + p.h) / TILE_SIZE);
   const onIce = (tileAt(btx0, bty)?.type === 'ice') || (tileAt(btx1, bty)?.type === 'ice');
-  if (p.onGround) p.vx *= onIce ? 0.98 : GROUND_FRICTION; // USING MUTABLE GROUND_FRICTION
+  if (p.onGround) p.vx *= onIce ? 0.98 : GROUND_FRICTION;
 
   checkHazards(p);
 
@@ -572,4 +558,20 @@ function renderFrame(localP, renderCtx = state.studioMode ? studioCtx : ctx, ren
   renderCtx.shadowBlur = 0;
   renderCtx.restore();
 
-  if (
+  if (renderCtx === ctx && state.editorMode) {
+    renderCtx.fillStyle = 'rgba(233,69,96,0.18)'; renderCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
+    renderCtx.font = 'bold 14px Segoe UI, sans-serif'; renderCtx.fillStyle = '#e94560'; renderCtx.textAlign = 'left';
+    renderCtx.fillText('🛠 EDITOR MODE — Click to place • Right-click to erase', 12, renderCanvas.height - 12);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   MAIN LOOP
+   ══════════════════════════════════════════════════════════ */
+let lastTime = 0;
+let rafId = null;
+function gameLoop(ts) {
+  const dt = Math.min(ts - lastTime, 50);
+  lastTime = ts;
+  state.animTime += dt;
+  state.frame++;
