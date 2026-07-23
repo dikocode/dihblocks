@@ -29,7 +29,7 @@ const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
    CONSTANTS & CONFIG
    ══════════════════════════════════════════════════════════ */
 const TILE_SIZE    = 40;
-const GRAVITY      = 0.55;
+let GRAVITY      = 0.55;
 const JUMP_FORCE   = -13.5;
 const MOVE_SPEED   = 4.5;
 const MAX_FALL_SPD = 18;
