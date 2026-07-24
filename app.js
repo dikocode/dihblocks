@@ -44,14 +44,15 @@ const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
    CONSTANTS & CONFIG
 ══════════════════════════════════════════════════════════ */
 const TILE_SIZE    = 40;
-// Gameplay values are expressed per second. The original game used values
-// tuned for one 60 Hz update, so convert them once rather than relying on
-// the display refresh rate.
+// Gameplay values are expressed per second so movement feels consistent at
+// different display refresh rates. A jump of about 2–3 tiles should feel
+// responsive rather than floaty.
 const BASE_FRAME_RATE = 60;
-const GRAVITY      = 0.55 * BASE_FRAME_RATE;
-const JUMP_FORCE   = -13.5 * BASE_FRAME_RATE;
+const GRAVITY      = 2200; // px/s² — strong enough for a quick landing
+const JUMP_FORCE   = -650; // px/s — about 96 px / 2.4 tiles of jump height
 const MOVE_SPEED   = 4.5 * BASE_FRAME_RATE;
-const MAX_FALL_SPD = 18 * BASE_FRAME_RATE;
+const MAX_FALL_SPD = 950;  // px/s — prevents an excessively slow terminal fall
+const WALK_CYCLE_SPEED = 0.006; // animation radians per millisecond
 const CAMERA_LERP_RATE = 8;
 const REMOTE_LERP_RATE = 12;
 const SYNC_RATE_MS = 50;   // 20Hz position broadcast
@@ -307,13 +308,21 @@ function drawCharacter(ctx, player, screenX, screenY, dt, isLocal) {
 
   // ── Compute limb angles based on anim state ──
   let walkPhase = 0;
-  if (player.animState === 'walk') walkPhase = Math.sin(t * 0.012) * 0.6;
+  if (player.animState === 'walk') walkPhase = Math.sin(t * WALK_CYCLE_SPEED) * 0.6;
   if (player.isDancing) {
     walkPhase = Math.sin(t * 0.006) * 1.0;
     const twist = Math.sin(t * 0.005) * 0.4;
     // arms up/out in dance
     drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY,  f, -1, Math.PI/3 + Math.sin(t*0.007)*0.8, a.armColor, ARM_W, ARM_H);
     drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY,  f,  1, Math.PI/3 + Math.cos(t*0.007)*0.8, a.armColor, ARM_W, ARM_H);
+  } else if (player.animState === 'jump') {
+    // Airborne pose: arms up/out and legs tucked so jumping is visibly
+    // different from both the idle and walking poses.
+    const jumpSway = Math.sin(t * 0.004) * 0.08;
+    drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY, f, -1,
+      -0.75 + jumpSway, a.armColor, ARM_W, ARM_H);
+    drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY, f,  1,
+       0.75 - jumpSway, a.armColor, ARM_W, ARM_H);
   } else {
     // Normal arms
     drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY,  f, -1, -walkPhase * 0.7, a.armColor, ARM_W, ARM_H);
@@ -323,8 +332,9 @@ function drawCharacter(ctx, player, screenX, screenY, dt, isLocal) {
   // ── Legs ──
   const legY = cy + HEAD_R*2 + TORSO_H + bobY;
   if (player.animState === 'jump') {
-    drawLeg(ctx, cx, legY, -1, -0.4, a.legColor, LEG_W, LEG_H);
-    drawLeg(ctx, cx, legY,  1,  0.4, a.legColor, LEG_W, LEG_H);
+    const jumpLegSway = Math.sin(t * 0.004) * 0.08;
+    drawLeg(ctx, cx, legY, -1, -0.55 - jumpLegSway, a.legColor, LEG_W, LEG_H);
+    drawLeg(ctx, cx, legY,  1,  0.55 + jumpLegSway, a.legColor, LEG_W, LEG_H);
   } else if (player.isDancing) {
     drawLeg(ctx, cx, legY, -1, Math.sin(t*0.009) * 0.8, a.legColor, LEG_W, LEG_H);
     drawLeg(ctx, cx, legY,  1, Math.sin(t*0.009 + Math.PI) * 0.8, a.legColor, LEG_W, LEG_H);
