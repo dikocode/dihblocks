@@ -151,7 +151,12 @@ const state = {
     distance: 0,
     centerX: 0,
     centerY: 0,
+    singleFinger: false,
+    lastX: 0,
+    lastY: 0,
+    moved: false,
   },
+  homeOpen: true,
 };
 
 /* ── Build tile lookup ──────────────────────────────────── */
@@ -245,8 +250,20 @@ window.addEventListener('keydown', e => {
 
   const gameIsActive = Boolean(state.localPlayer && !state.editorMode);
   const editorUsesSpace = state.editorMode && e.code === 'Space';
-  if ((gameIsActive && isGameControlKey(e.code)) || editorUsesSpace) {
+  const editorUsesNavigation = state.editorMode && [
+    'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+    'Equal', 'NumpadAdd', 'Minus', 'NumpadSubtract',
+  ].includes(e.code);
+  if ((gameIsActive && isGameControlKey(e.code)) || editorUsesSpace || editorUsesNavigation) {
     e.preventDefault();
+  }
+  if (editorUsesNavigation && !e.repeat) {
+    if (e.code === 'ArrowLeft')  panEditorByScreenDelta(-80, 0);
+    if (e.code === 'ArrowRight') panEditorByScreenDelta(80, 0);
+    if (e.code === 'ArrowUp')    panEditorByScreenDelta(0, -80);
+    if (e.code === 'ArrowDown')  panEditorByScreenDelta(0, 80);
+    if (e.code === 'Equal' || e.code === 'NumpadAdd') setEditorZoom(state.editorZoom * 1.2);
+    if (e.code === 'Minus' || e.code === 'NumpadSubtract') setEditorZoom(state.editorZoom / 1.2);
   }
   if (e.code === 'KeyE' && gameIsActive && !e.repeat) App.dance();
 });
@@ -714,6 +731,15 @@ function clampCamera() {
   state.camera.y = Math.max(0, Math.min(state.camera.y, maxY));
 }
 
+function panEditorByScreenDelta(deltaX, deltaY) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  state.camera.x -= deltaX * scaleX / state.editorZoom;
+  state.camera.y -= deltaY * scaleY / state.editorZoom;
+  clampCamera();
+}
+
 function setEditorZoom(nextZoom, anchorX = canvas.width / 2, anchorY = canvas.height / 2) {
   const oldZoom = state.editorZoom;
   const newZoom = Math.max(0.25, Math.min(4, nextZoom));
@@ -928,7 +954,7 @@ function renderFrame(localP) {
     ctx.font = 'bold 14px Segoe UI, sans-serif';
     ctx.fillStyle = '#e94560';
     ctx.textAlign = 'left';
-    ctx.fillText('🛠 EDITOR MODE — Click to place • Right-click to erase • Space + drag to pan', 12 / zoom, (canvas.height - 12) / zoom);
+    ctx.fillText('🛠 EDITOR — Click to place • Right-click to erase • Space + drag or touch-drag to pan • Ctrl/⌘ + wheel to zoom', 12 / zoom, (canvas.height - 12) / zoom);
   }
 }
 
@@ -1252,6 +1278,7 @@ const App = {
     document.getElementById('screen-auth').classList.add('hidden');
     document.getElementById('screen-game').classList.remove('hidden');
     document.getElementById('topbar-username').textContent = state.user.username;
+    document.getElementById('home-username').textContent = state.user.username;
 
     resizeCanvas();
     rebuildTileMap();
@@ -1264,6 +1291,7 @@ const App = {
     initJoystick();
     initRealtime();
     updatePlayerList();
+    App.hub.show();
 
     requestAnimationFrame(ts => { lastTime = ts; requestAnimationFrame(gameLoop); });
     App.notify(`Welcome, ${state.user.username}! 🎮`);
@@ -1346,7 +1374,9 @@ const App = {
       }
       clampCamera();
       updateEditorZoomLabel();
-      App.notify(state.editorMode ? '🛠 Editor mode ON' : '🎮 Play mode ON');
+      document.getElementById('canvas-wrap').classList.toggle('editor-active', state.editorMode);
+    document.getElementById('editor-mobile-tools').classList.toggle('hidden', !state.editorMode);
+    App.notify(state.editorMode ? '🛠 Editor mode ON' : '🎮 Play mode ON');
     },
     zoomIn() {
       setEditorZoom(state.editorZoom * 1.2);
@@ -1379,6 +1409,52 @@ const App = {
     jumpEnd()    { input.mobile.jump  = false; },
     danceStart() { input.mobile.dance = true;  App.dance(); },
     danceEnd()   { input.mobile.dance = false; },
+  },
+
+  /* ── Game Hub ─────────────────────────────────────────── */
+  hub: {
+    show() {
+      if (state.editorMode) App.editor.toggle();
+      state.homeOpen = true;
+      document.getElementById('game-home').classList.remove('hidden');
+      document.getElementById('home-username').textContent = state.user?.username || '—';
+      App.hub.refresh();
+    },
+    hide() {
+      state.homeOpen = false;
+      document.getElementById('game-home').classList.add('hidden');
+    },
+    async refresh() {
+      const container = document.getElementById('game-list');
+      container.innerHTML = '<div class="game-loading">Loading games…</div>';
+      const { data, error } = await _supabase.from('games').select('*').order('created_at', { ascending: false }).limit(30);
+      if (error || !data) {
+        container.innerHTML = '<div class="game-empty">Could not load published games.<br><br><button class="btn btn-secondary btn-sm" onclick="App.hub.refresh()">Try again</button></div>';
+        return;
+      }
+      const savedCards = data.map(m =>
+        '<article class="game-card"><div><div class="game-card-top"><span class="eyebrow">COMMUNITY GAME</span><span class="game-card-icon">◈</span></div><h2>' + escapeHtml(m.title) + '</h2><p>Published by ' + escapeHtml(m.creator) + '.</p><div class="game-card-meta">' + (m.created_at ? new Date(m.created_at).toLocaleDateString() : 'Recently published') + '</div></div><div class="game-card-actions"><button class="btn btn-primary btn-sm" onclick="App.hub.playSaved(\'' + escapeHtml(m.id) + '\')">Play game</button><button class="btn btn-ghost btn-sm" onclick="App.hub.editSaved(\'' + escapeHtml(m.id) + '\')">Edit</button></div></article>'
+      ).join('');
+      container.innerHTML = '<article class="game-card featured"><div><div class="game-card-top"><span class="eyebrow">FEATURED</span><span class="game-card-icon">✦</span></div><h2>Parkour Base</h2><p>Jump across platforms, avoid hazards, and explore the original Dihblocks world.</p><div class="game-card-meta">Built-in starter game</div></div><div class="game-card-actions"><button class="btn btn-primary btn-sm" onclick="App.hub.playDefault()">Play game</button></div></article>' + (savedCards || '<div class="game-empty">No community games yet. Create the first one.</div>');
+    },
+    playDefault() {
+      App.maps.applyMapData(buildDefaultMap());
+      App.hub.hide();
+      App.notify('▶ Playing Parkour Base');
+    },
+    async playSaved(id) { await App.maps.loadMap(id); },
+    async editSaved(id) {
+      await App.maps.loadMap(id, true);
+      App.hub.hide();
+      if (!state.editorMode) App.editor.toggle();
+      App.notify('🛠 Editing selected game');
+    },
+    createGame() {
+      App.maps.applyMapData(buildDefaultMap());
+      App.hub.hide();
+      if (!state.editorMode) App.editor.toggle();
+      App.notify('🛠 New game started — build something great');
+    },
   },
 
   /* ── Modals ───────────────────────────────────────────── */
@@ -1471,8 +1547,7 @@ const App = {
     },
 
     openMapBrowser() {
-      App.modals.open('mapbrowser');
-      App.modals.refreshMaps();
+      App.hub.show();
     },
     async refreshMaps() {
       const container = document.getElementById('map-list-container');
@@ -1563,7 +1638,7 @@ const App = {
       setTimeout(() => App.modals.close('savemap'), 1800);
     },
 
-    async loadMap(id) {
+    async loadMap(id, keepEditor = false) {
       const { data, error } = await _supabase
         .from('games')
         .select('*')
@@ -1573,7 +1648,7 @@ const App = {
       if (error || !data) { App.notify('Failed to load map.'); return; }
 
       App.maps.applyMapData(data.data);
-      App.modals.close('mapbrowser');
+      if (!keepEditor) App.hub.hide();
       App.notify('🗺 Loaded: ' + data.title);
 
       // Broadcast
@@ -1621,18 +1696,13 @@ function initEditorListeners() {
   canvas.addEventListener('mousemove', e => {
     if (!state.editorMode || !state.mouseDown) return;
     if (state.isPanning) {
-      const rect = canvas.getBoundingClientRect();
-      state.camera.x -= (e.clientX - state.panLastX) / (rect.width / canvas.width) / state.editorZoom;
-      state.camera.y -= (e.clientY - state.panLastY) / (rect.height / canvas.height) / state.editorZoom;
+      panEditorByScreenDelta(e.clientX - state.panLastX, e.clientY - state.panLastY);
       state.panLastX = e.clientX;
       state.panLastY = e.clientY;
-      clampCamera();
       return;
     }
-    if (state.mouseDown) {
-      state.isDragging = true;
-      editorCanvasClick(e, e.buttons === 2);
-    }
+    state.isDragging = true;
+    editorCanvasClick(e, e.buttons === 2);
   });
   const stopPointer = () => {
     state.mouseDown = false;
@@ -1648,43 +1718,56 @@ function initEditorListeners() {
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-    const isPinch = e.ctrlKey;
-    const isMouseWheel = Math.abs(e.deltaY) >= 40 && !e.deltaX;
-
-    if (isPinch || isMouseWheel) {
+    if (e.ctrlKey || e.metaKey) {
       setEditorZoom(state.editorZoom * Math.exp(-e.deltaY * 0.0015), x, y);
       return;
     }
-
-    // Small two-finger trackpad scrolls pan the editor viewport.
-    state.camera.x += (e.deltaX || (e.shiftKey ? e.deltaY : 0)) / state.editorZoom;
-    state.camera.y += (!e.shiftKey ? e.deltaY : 0) / state.editorZoom;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    state.camera.x += (e.deltaX || (e.shiftKey ? e.deltaY : 0)) * scaleX / state.editorZoom;
+    state.camera.y += (e.shiftKey ? 0 : e.deltaY) * scaleY / state.editorZoom;
     clampCamera();
   }, { passive: false });
 
   canvas.addEventListener('touchstart', e => {
-    if (!state.editorMode || e.touches.length < 2) return;
+    if (!state.editorMode) return;
     e.preventDefault();
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      state.editorTouch.active = true;
+      state.editorTouch.singleFinger = true;
+      state.editorTouch.lastX = t.clientX;
+      state.editorTouch.lastY = t.clientY;
+      state.editorTouch.moved = false;
+      return;
+    }
     const first = e.touches[0];
     const second = e.touches[1];
     state.editorTouch.active = true;
-    state.editorTouch.distance = Math.hypot(
-      second.clientX - first.clientX,
-      second.clientY - first.clientY
-    );
+    state.editorTouch.singleFinger = false;
+    state.editorTouch.distance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
     state.editorTouch.centerX = (first.clientX + second.clientX) / 2;
     state.editorTouch.centerY = (first.clientY + second.clientY) / 2;
   }, { passive: false });
 
   canvas.addEventListener('touchmove', e => {
-    if (!state.editorMode || !state.editorTouch.active || e.touches.length < 2) return;
+    if (!state.editorMode || !state.editorTouch.active) return;
     e.preventDefault();
+    if (e.touches.length === 1 && state.editorTouch.singleFinger) {
+      const t = e.touches[0];
+      const dx = t.clientX - state.editorTouch.lastX;
+      const dy = t.clientY - state.editorTouch.lastY;
+      if (Math.hypot(dx, dy) > 0) state.editorTouch.moved = true;
+      panEditorByScreenDelta(dx, dy);
+      state.editorTouch.lastX = t.clientX;
+      state.editorTouch.lastY = t.clientY;
+      return;
+    }
+    if (e.touches.length < 2) return;
+    state.editorTouch.singleFinger = false;
     const first = e.touches[0];
     const second = e.touches[1];
-    const distance = Math.hypot(
-      second.clientX - first.clientX,
-      second.clientY - first.clientY
-    );
+    const distance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
     const centerX = (first.clientX + second.clientX) / 2;
     const centerY = (first.clientY + second.clientY) / 2;
     const rect = canvas.getBoundingClientRect();
@@ -1692,29 +1775,28 @@ function initEditorListeners() {
     const scaleY = canvas.height / rect.height;
     const anchorX = (centerX - rect.left) * scaleX;
     const anchorY = (centerY - rect.top) * scaleY;
-
     if (state.editorTouch.distance > 0) {
-      setEditorZoom(
-        state.editorZoom * (distance / state.editorTouch.distance),
-        anchorX,
-        anchorY
-      );
+      setEditorZoom(state.editorZoom * (distance / state.editorTouch.distance), anchorX, anchorY);
     }
-
-    state.camera.x -= (centerX - state.editorTouch.centerX) * scaleX / state.editorZoom;
-    state.camera.y -= (centerY - state.editorTouch.centerY) * scaleY / state.editorZoom;
-    clampCamera();
+    panEditorByScreenDelta(centerX - state.editorTouch.centerX, centerY - state.editorTouch.centerY);
     state.editorTouch.distance = distance;
     state.editorTouch.centerX = centerX;
     state.editorTouch.centerY = centerY;
   }, { passive: false });
 
-  const stopTouchGesture = () => {
+  const resetTouchGesture = () => {
     state.editorTouch.active = false;
+    state.editorTouch.singleFinger = false;
     state.editorTouch.distance = 0;
+    state.editorTouch.moved = false;
   };
-  canvas.addEventListener('touchend', stopTouchGesture, { passive: true });
-  canvas.addEventListener('touchcancel', stopTouchGesture, { passive: true });
+  canvas.addEventListener('touchend', e => {
+    if (state.editorTouch.singleFinger && !state.editorTouch.moved && e.changedTouches[0]) {
+      editorCanvasClick(e.changedTouches[0], false);
+    }
+    resetTouchGesture();
+  }, { passive: false });
+  canvas.addEventListener('touchcancel', resetTouchGesture, { passive: false });
 }
 
 /* ══════════════════════════════════════════════════════════

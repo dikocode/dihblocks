@@ -75,6 +75,30 @@
 ══════════════════════════════════════════════════════ -->
 <div id="screen-game" class="hidden">
 
+  <!-- Game Hub -->
+  <section id="game-home" class="hidden" aria-label="Choose a game">
+    <div class="game-home-shell">
+      <div class="game-home-header">
+        <div>
+          <div class="eyebrow">DIHBLOCKS ARCADE</div>
+          <h1>Choose a game</h1>
+          <p>Pick a world to play, or build your own level in the editor.</p>
+        </div>
+        <div class="game-home-actions">
+          <button class="btn btn-secondary" type="button" onclick="App.hub.refresh()">↺ Refresh</button>
+          <button class="btn btn-primary" type="button" onclick="App.hub.createGame()">＋ Create game</button>
+        </div>
+      </div>
+      <div id="game-list" class="game-list" aria-live="polite">
+        <div class="game-loading">Loading games…</div>
+      </div>
+      <div class="game-home-footer">
+        <span>Signed in as <strong id="home-username">—</strong></span>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="App.auth.logout()">Sign out</button>
+      </div>
+    </div>
+  </section>
+
   <!-- Top Bar -->
   <div id="topbar">
     <span class="brand">Dihblocks</span>
@@ -83,7 +107,7 @@
     <div class="topbar-sep"></div>
     <div class="topbar-actions">
       <button class="btn btn-secondary btn-sm" onclick="App.modals.openCustomizer()">🎨 Avatar</button>
-      <button class="btn btn-secondary btn-sm" onclick="App.modals.openMapBrowser()">🗂 Maps</button>
+      <button class="btn btn-secondary btn-sm" onclick="App.hub.show()">🗂 Games</button>
       <button class="btn btn-secondary btn-sm" onclick="App.editor.toggle()">🛠 Editor</button>
       <button class="btn btn-ghost     btn-sm" onclick="App.toggleChat()">💬</button>
       <button class="btn btn-ghost     btn-sm" onclick="App.auth.logout()">Sign Out</button>
@@ -110,6 +134,14 @@
                 onclick="App.editor.zoomIn()">+</button>
         <button class="btn btn-secondary btn-sm" type="button" title="Center map"
                 onclick="App.editor.centerView()">Center</button>
+      </div>
+
+      <!-- Compact mobile editor controls -->
+      <div id="editor-mobile-tools" class="hidden" aria-label="Mobile editor controls">
+        <span class="editor-mobile-hint">Drag to pan · tap to place</span>
+        <button class="btn btn-ghost btn-icon" type="button" onclick="App.editor.zoomOut()" aria-label="Zoom out">−</button>
+        <button class="btn btn-ghost btn-icon" type="button" onclick="App.editor.zoomIn()" aria-label="Zoom in">＋</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="App.editor.centerView()">Center</button>
       </div>
 
       <!-- Editor palette (hidden by default) -->
