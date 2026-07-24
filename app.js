@@ -44,11 +44,16 @@ const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
    CONSTANTS & CONFIG
 ══════════════════════════════════════════════════════════ */
 const TILE_SIZE    = 40;
-const GRAVITY      = 0.55;
-const JUMP_FORCE   = -13.5;
-const MOVE_SPEED   = 4.5;
-const MAX_FALL_SPD = 18;
-const LERP_FACTOR  = 0.18;
+// Gameplay values are expressed per second. The original game used values
+// tuned for one 60 Hz update, so convert them once rather than relying on
+// the display refresh rate.
+const BASE_FRAME_RATE = 60;
+const GRAVITY      = 0.55 * BASE_FRAME_RATE;
+const JUMP_FORCE   = -13.5 * BASE_FRAME_RATE;
+const MOVE_SPEED   = 4.5 * BASE_FRAME_RATE;
+const MAX_FALL_SPD = 18 * BASE_FRAME_RATE;
+const CAMERA_LERP_RATE = 8;
+const REMOTE_LERP_RATE = 12;
 const SYNC_RATE_MS = 50;   // 20Hz position broadcast
 const CHANNEL_NAME = 'dihblocks-world-v1';
 const DANCE_DURATION = 3500; // ms
@@ -136,6 +141,16 @@ const state = {
   animTime:    0,
   isDragging:  false,
   mouseDown:   false,
+  editorZoom:  1,
+  isPanning:   false,
+  panLastX:    0,
+  panLastY:    0,
+  editorTouch: {
+    active: false,
+    distance: 0,
+    centerX: 0,
+    centerY: 0,
+  },
 };
 
 /* ── Build tile lookup ──────────────────────────────────── */
@@ -206,14 +221,39 @@ const input = {
   mobile: { jx: 0, jy: 0, jump: false, dance: false },
 };
 
+function isTypingTarget(element = document.activeElement) {
+  return Boolean(element && (
+    element.tagName === 'INPUT' ||
+    element.tagName === 'TEXTAREA' ||
+    element.isContentEditable
+  ));
+}
+
+function isGameControlKey(code) {
+  return [
+    'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+    'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE'
+  ].includes(code);
+}
+
 window.addEventListener('keydown', e => {
+  // Never let gameplay or editor shortcuts interfere with text entry.
+  if (isTypingTarget()) return;
+
   input.keys[e.code] = true;
-  if ((e.code === 'Space') || (e.code === 'ArrowUp') || (e.code === 'KeyW')) {
+
+  const gameIsActive = Boolean(state.localPlayer && !state.editorMode);
+  const editorUsesSpace = state.editorMode && e.code === 'Space';
+  if ((gameIsActive && isGameControlKey(e.code)) || editorUsesSpace) {
     e.preventDefault();
   }
-  if (e.code === 'KeyE') App.dance();
+  if (e.code === 'KeyE' && gameIsActive && !e.repeat) App.dance();
 });
-window.addEventListener('keyup', e => { input.keys[e.code] = false; });
+window.addEventListener('keyup', e => {
+  // Clear the key even if focus moved into chat while it was held.
+  input.keys[e.code] = false;
+});
+window.addEventListener('blur', () => { input.keys = {}; });
 
 function isMobile() {
   return ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -256,7 +296,7 @@ function drawCharacter(ctx, player, screenX, screenY, dt, isLocal) {
 
   // Death flash
   if (player.isDead) {
-    ctx.globalAlpha = 0.4 + Math.sin(Date.now() * 0.02) * 0.3;
+    ctx.globalAlpha = 0.4 + Math.sin(state.animTime * 0.02) * 0.3;
   }
 
   // Dance bobbing
@@ -448,7 +488,7 @@ function drawTile(ctx, tile, sx, sy) {
   }
 
   if (tile.type === 'lava') {
-    const t = Date.now() * 0.003;
+    const t = state.animTime * 0.003;
     const g = ctx.createLinearGradient(sx, sy, sx, sy+S);
     g.addColorStop(0, `hsl(${20+Math.sin(t)*10}, 100%, 55%)`);
     g.addColorStop(1, `hsl(${5+Math.cos(t)*5},  100%, 35%)`);
@@ -458,7 +498,7 @@ function drawTile(ctx, tile, sx, sy) {
     ctx.fillStyle = 'rgba(255,180,0,0.5)';
     ctx.beginPath();
     for (let i = 0; i <= S; i += 4) {
-      const wY = Math.sin((i + Date.now()*0.005) * 0.3) * 3;
+      const wY = Math.sin((i + state.animTime * 0.005) * 0.3) * 3;
       if (i === 0) ctx.moveTo(sx, sy + wY + 4);
       else ctx.lineTo(sx+i, sy + wY + 4);
     }
@@ -473,7 +513,7 @@ function drawTile(ctx, tile, sx, sy) {
     ctx.fillStyle = '#9b59b6';
     ctx.fillRect(sx, sy, S, S);
     ctx.fillStyle = '#c678dd';
-    const bh = Math.abs(Math.sin(Date.now()*0.005)) * 6;
+     const bh = Math.abs(Math.sin(state.animTime * 0.005)) * 6;
     ctx.fillRect(sx+4, sy+S-8-bh, S-8, 8+bh);
     return;
   }
@@ -526,21 +566,21 @@ function solidAt(tx, ty) {
 
 function resolvePlayerPhysics(p, dt) {
   if (p.isDead) {
-    p.deathTimer -= dt;
+    p.deathTimer -= dt * 1000;
     if (p.deathTimer <= 0) respawn(p);
     return;
   }
 
   // Apply gravity
-  p.vy += GRAVITY;
+  p.vy += GRAVITY * dt;
   if (p.vy > MAX_FALL_SPD) p.vy = MAX_FALL_SPD;
 
   // Move X
-  p.x += p.vx;
+  p.x += p.vx * dt;
   resolveAxisX(p);
 
   // Move Y
-  p.y += p.vy;
+  p.y += p.vy * dt;
   resolveAxisY(p);
 
   // Ice friction (reduce vx slowly on ice)
@@ -551,7 +591,8 @@ function resolvePlayerPhysics(p, dt) {
   const rightBelow = tileAt(btx1, bty);
   const onIce = (leftBelow?.type === 'ice') || (rightBelow?.type === 'ice');
   if (p.onGround) {
-    p.vx *= onIce ? 0.98 : 0.78;
+    const friction = onIce ? 0.98 : 0.78;
+    p.vx *= Math.pow(friction, dt * BASE_FRAME_RATE);
   }
 
   // Hazard / lava check
@@ -635,7 +676,7 @@ function die(p) {
   if (p.isDead) return;
   p.isDead    = true;
   p.deathTimer = 1200;
-  p.vx = 0; p.vy = -8;
+  p.vx = 0; p.vy = -8 * BASE_FRAME_RATE;
   App.notify('💀 You died!');
 }
 
@@ -647,14 +688,69 @@ function respawn(p) {
   p.vx = 0;   p.vy = 0;
 }
 
+function getEditorViewportSize() {
+  const zoom = state.editorMode ? state.editorZoom : 1;
+  return {
+    width: canvas.width / zoom,
+    height: canvas.height / zoom,
+  };
+}
+
+function clampCamera() {
+  const { width, height } = getEditorViewportSize();
+  const maxX = Math.max(0, state.map.width - width);
+  const maxY = Math.max(0, state.map.height - height);
+  state.camera.x = Math.max(0, Math.min(state.camera.x, maxX));
+  state.camera.y = Math.max(0, Math.min(state.camera.y, maxY));
+}
+
+function setEditorZoom(nextZoom, anchorX = canvas.width / 2, anchorY = canvas.height / 2) {
+  const oldZoom = state.editorZoom;
+  const newZoom = Math.max(0.25, Math.min(4, nextZoom));
+  if (newZoom === oldZoom) return;
+
+  // Preserve the world point currently under the pointer.
+  const worldX = state.camera.x + anchorX / oldZoom;
+  const worldY = state.camera.y + anchorY / oldZoom;
+  state.editorZoom = newZoom;
+  state.camera.x = worldX - anchorX / newZoom;
+  state.camera.y = worldY - anchorY / newZoom;
+  clampCamera();
+  updateEditorZoomLabel();
+}
+
+function resetEditorView() {
+  state.editorZoom = 1;
+  state.camera.x = 0;
+  state.camera.y = 0;
+  clampCamera();
+  updateEditorZoomLabel();
+}
+
+function centerEditorView() {
+  const { width, height } = getEditorViewportSize();
+  state.camera.x = (state.map.width - width) / 2;
+  state.camera.y = (state.map.height - height) / 2;
+  clampCamera();
+}
+
+function updateEditorZoomLabel() {
+  const label = document.getElementById('editor-zoom-label');
+  if (label) label.textContent = `${Math.round(state.editorZoom * 100)}%`;
+}
+
 /* ══════════════════════════════════════════════════════════
    MAIN GAME LOOP
 ══════════════════════════════════════════════════════════ */
 let lastTime = 0;
 function gameLoop(ts) {
-  const dt = Math.min(ts - lastTime, 50);
+  const deltaTime = lastTime === 0
+    ? 0
+    : Math.min(Math.max((ts - lastTime) / 1000, 0), 0.1);
   lastTime = ts;
-  state.animTime += dt;
+  // Keep the existing animation time unit (milliseconds) while deriving it
+  // from the frame-rate-independent delta.
+  state.animTime += deltaTime * 1000;
   state.frame++;
 
   const p = state.localPlayer;
@@ -682,7 +778,7 @@ function gameLoop(ts) {
 
     // Dance timer countdown
     if (p.isDancing) {
-      p.danceTimer -= dt;
+      p.danceTimer -= deltaTime * 1000;
       if (p.danceTimer <= 0) { p.isDancing = false; p.danceTimer = 0; }
     }
 
@@ -695,27 +791,30 @@ function gameLoop(ts) {
     p.animTime = state.animTime;
 
     // Physics
-    resolvePlayerPhysics(p, dt);
+    resolvePlayerPhysics(p, deltaTime);
 
     // Chat timer
-    if (p.chatTimer > 0) p.chatTimer -= dt;
+    if (p.chatTimer > 0) p.chatTimer -= deltaTime * 1000;
   }
 
   // ── Remote players lerp + anim ──
+  const remoteLerp = 1 - Math.exp(-REMOTE_LERP_RATE * deltaTime);
   for (const rp of Object.values(state.players)) {
-    rp.x += (rp.targetX - rp.x) * LERP_FACTOR;
-    rp.y += (rp.targetY - rp.y) * LERP_FACTOR;
+    rp.x += (rp.targetX - rp.x) * remoteLerp;
+    rp.y += (rp.targetY - rp.y) * remoteLerp;
     rp.animTime = state.animTime;
-    if (rp.chatTimer > 0) rp.chatTimer -= dt;
+    if (rp.chatTimer > 0) rp.chatTimer -= deltaTime * 1000;
   }
 
   // ── Camera ──
-  const camTargetX = p.x + p.w/2 - canvas.width/2;
-  const camTargetY = p.y + p.h/2 - canvas.height/2;
-  state.camera.x += (camTargetX - state.camera.x) * 0.12;
-  state.camera.y += (camTargetY - state.camera.y) * 0.12;
-  state.camera.x = Math.max(0, Math.min(state.camera.x, state.map.width  - canvas.width));
-  state.camera.y = Math.max(0, Math.min(state.camera.y, state.map.height - canvas.height));
+  if (!state.editorMode) {
+    const camTargetX = p.x + p.w/2 - canvas.width/2;
+    const camTargetY = p.y + p.h/2 - canvas.height/2;
+    const cameraLerp = 1 - Math.exp(-CAMERA_LERP_RATE * deltaTime);
+    state.camera.x += (camTargetX - state.camera.x) * cameraLerp;
+    state.camera.y += (camTargetY - state.camera.y) * cameraLerp;
+  }
+  clampCamera();
 
   // ── Render ──
   renderFrame(p);
@@ -758,14 +857,19 @@ function renderFrame(localP) {
   }
   ctx.globalAlpha = 1;
 
+  const zoom = state.editorMode ? state.editorZoom : 1;
+  const viewWidth = canvas.width / zoom;
+  const viewHeight = canvas.height / zoom;
+
   ctx.save();
+  ctx.scale(zoom, zoom);
   ctx.translate(-state.camera.x, -state.camera.y);
 
   // ── Tiles ──
   const vx0 = Math.floor(state.camera.x / TILE_SIZE) - 1;
-  const vx1 = Math.ceil((state.camera.x + canvas.width) / TILE_SIZE) + 1;
+  const vx1 = Math.ceil((state.camera.x + viewWidth) / TILE_SIZE) + 1;
   const vy0 = Math.floor(state.camera.y / TILE_SIZE) - 1;
-  const vy1 = Math.ceil((state.camera.y + canvas.height) / TILE_SIZE) + 1;
+  const vy1 = Math.ceil((state.camera.y + viewHeight) / TILE_SIZE) + 1;
 
   for (const t of state.map.tiles) {
     if (t.x < vx0 || t.x > vx1 || t.y < vy0 || t.y > vy1) continue;
@@ -814,7 +918,7 @@ function renderFrame(localP) {
     ctx.font = 'bold 14px Segoe UI, sans-serif';
     ctx.fillStyle = '#e94560';
     ctx.textAlign = 'left';
-    ctx.fillText('🛠 EDITOR MODE — Click to place • Right-click to erase', 12, canvas.height - 12);
+    ctx.fillText('🛠 EDITOR MODE — Click to place • Right-click to erase • Space + drag to pan', 12 / zoom, (canvas.height - 12) / zoom);
   }
 }
 
@@ -940,8 +1044,10 @@ function updatePlayerList() {
 function editorCanvasClick(e, isRight) {
   if (!state.editorMode) return;
   const rect = canvas.getBoundingClientRect();
-  const mx   = e.clientX - rect.left  + state.camera.x;
-  const my   = e.clientY - rect.top   + state.camera.y;
+  const mx   = state.camera.x +
+    (e.clientX - rect.left) * (canvas.width / rect.width) / state.editorZoom;
+  const my   = state.camera.y +
+    (e.clientY - rect.top) * (canvas.height / rect.height) / state.editorZoom;
   const tx   = Math.floor(mx / TILE_SIZE);
   const ty   = Math.floor(my / TILE_SIZE);
   const key  = `${tx},${ty}`;
@@ -1220,9 +1326,29 @@ const App = {
     toggle() {
       state.editorMode = !state.editorMode;
       document.getElementById('editor-palette').classList.toggle('hidden', !state.editorMode);
+      document.getElementById('editor-controls').classList.toggle('hidden', !state.editorMode);
       document.getElementById('mode-badge').textContent = state.editorMode ? 'EDITOR' : 'PLAY';
       document.getElementById('mode-badge').style.background = state.editorMode ? '#e74c3c' : 'var(--accent)';
+      if (state.editorMode) {
+        centerEditorView();
+      } else {
+        state.editorZoom = 1;
+      }
+      clampCamera();
+      updateEditorZoomLabel();
       App.notify(state.editorMode ? '🛠 Editor mode ON' : '🎮 Play mode ON');
+    },
+    zoomIn() {
+      setEditorZoom(state.editorZoom * 1.2);
+    },
+    zoomOut() {
+      setEditorZoom(state.editorZoom / 1.2);
+    },
+    resetView() {
+      resetEditorView();
+    },
+    centerView() {
+      centerEditorView();
     },
     selectTile(type, btn) {
       state.editorTile = type;
@@ -1463,20 +1589,122 @@ const App = {
    EDITOR CANVAS EVENTS
 ══════════════════════════════════════════════════════════ */
 function initEditorListeners() {
+  if (initEditorListeners.initialized) return;
+  initEditorListeners.initialized = true;
+
   canvas.addEventListener('mousedown', e => {
+    if (!state.editorMode) return;
     state.mouseDown = true;
     state.isDragging = false;
-    if (e.button === 0 && state.editorMode) editorCanvasClick(e, false);
-    if (e.button === 2 && state.editorMode) editorCanvasClick(e, true);
+    const spacePan = input.keys.Space || e.button === 1;
+    if (spacePan) {
+      state.isPanning = true;
+      state.panLastX = e.clientX;
+      state.panLastY = e.clientY;
+      canvas.classList.add('is-panning');
+      e.preventDefault();
+      return;
+    }
+    if (e.button === 0) editorCanvasClick(e, false);
+    if (e.button === 2) editorCanvasClick(e, true);
   });
   canvas.addEventListener('mousemove', e => {
-    if (state.mouseDown && state.editorMode) {
+    if (!state.editorMode || !state.mouseDown) return;
+    if (state.isPanning) {
+      const rect = canvas.getBoundingClientRect();
+      state.camera.x -= (e.clientX - state.panLastX) / (rect.width / canvas.width) / state.editorZoom;
+      state.camera.y -= (e.clientY - state.panLastY) / (rect.height / canvas.height) / state.editorZoom;
+      state.panLastX = e.clientX;
+      state.panLastY = e.clientY;
+      clampCamera();
+      return;
+    }
+    if (state.mouseDown) {
       state.isDragging = true;
       editorCanvasClick(e, e.buttons === 2);
     }
   });
-  canvas.addEventListener('mouseup',    () => { state.mouseDown = false; });
+  const stopPointer = () => {
+    state.mouseDown = false;
+    state.isPanning = false;
+    canvas.classList.remove('is-panning');
+  };
+  canvas.addEventListener('mouseup', stopPointer);
+  canvas.addEventListener('mouseleave', stopPointer);
   canvas.addEventListener('contextmenu', e => { e.preventDefault(); });
+  canvas.addEventListener('wheel', e => {
+    if (!state.editorMode) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const isPinch = e.ctrlKey;
+    const isMouseWheel = Math.abs(e.deltaY) >= 40 && !e.deltaX;
+
+    if (isPinch || isMouseWheel) {
+      setEditorZoom(state.editorZoom * Math.exp(-e.deltaY * 0.0015), x, y);
+      return;
+    }
+
+    // Small two-finger trackpad scrolls pan the editor viewport.
+    state.camera.x += (e.deltaX || (e.shiftKey ? e.deltaY : 0)) / state.editorZoom;
+    state.camera.y += (!e.shiftKey ? e.deltaY : 0) / state.editorZoom;
+    clampCamera();
+  }, { passive: false });
+
+  canvas.addEventListener('touchstart', e => {
+    if (!state.editorMode || e.touches.length < 2) return;
+    e.preventDefault();
+    const first = e.touches[0];
+    const second = e.touches[1];
+    state.editorTouch.active = true;
+    state.editorTouch.distance = Math.hypot(
+      second.clientX - first.clientX,
+      second.clientY - first.clientY
+    );
+    state.editorTouch.centerX = (first.clientX + second.clientX) / 2;
+    state.editorTouch.centerY = (first.clientY + second.clientY) / 2;
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    if (!state.editorMode || !state.editorTouch.active || e.touches.length < 2) return;
+    e.preventDefault();
+    const first = e.touches[0];
+    const second = e.touches[1];
+    const distance = Math.hypot(
+      second.clientX - first.clientX,
+      second.clientY - first.clientY
+    );
+    const centerX = (first.clientX + second.clientX) / 2;
+    const centerY = (first.clientY + second.clientY) / 2;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const anchorX = (centerX - rect.left) * scaleX;
+    const anchorY = (centerY - rect.top) * scaleY;
+
+    if (state.editorTouch.distance > 0) {
+      setEditorZoom(
+        state.editorZoom * (distance / state.editorTouch.distance),
+        anchorX,
+        anchorY
+      );
+    }
+
+    state.camera.x -= (centerX - state.editorTouch.centerX) * scaleX / state.editorZoom;
+    state.camera.y -= (centerY - state.editorTouch.centerY) * scaleY / state.editorZoom;
+    clampCamera();
+    state.editorTouch.distance = distance;
+    state.editorTouch.centerX = centerX;
+    state.editorTouch.centerY = centerY;
+  }, { passive: false });
+
+  const stopTouchGesture = () => {
+    state.editorTouch.active = false;
+    state.editorTouch.distance = 0;
+  };
+  canvas.addEventListener('touchend', stopTouchGesture, { passive: true });
+  canvas.addEventListener('touchcancel', stopTouchGesture, { passive: true });
 }
 
 /* ══════════════════════════════════════════════════════════

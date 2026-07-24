@@ -245,6 +245,11 @@ label { font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; display:blo
   display: block;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  touch-action: none;
+  cursor: crosshair;
+}
+#gameCanvas.is-panning {
+  cursor: grabbing;
 }
 
 /* ── Ping Indicator ───────────────────────────────────── */
@@ -284,6 +289,36 @@ label { font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; display:blo
   gap: 6px;
   pointer-events: none;
   z-index: 500;
+}
+
+/* ── Editor View Controls ───────────────────────────────── */
+#editor-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  z-index: 200;
+}
+#editor-controls .btn-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.editor-zoom-label {
+  min-width: 58px;
+  padding: 6px 8px;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
 .toast {
   background: rgba(20,30,60,0.92);
@@ -681,4 +716,5 @@ label { font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; display:blo
 @media (max-width: 640px) {
   #side-panel { display: none; }
   #topbar .brand { font-size: 1rem; }
+  #editor-controls { top: 44px; }
 }

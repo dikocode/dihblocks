@@ -100,6 +100,18 @@
       <div id="player-count">0 players</div>
       <div id="notification-area"></div>
 
+      <!-- Editor viewport controls -->
+      <div id="editor-controls" class="hidden" aria-label="Editor view controls">
+        <button class="btn btn-ghost btn-icon" type="button" title="Zoom out" aria-label="Zoom out"
+                onclick="App.editor.zoomOut()">−</button>
+        <button class="btn btn-ghost editor-zoom-label" type="button" id="editor-zoom-label"
+                title="Reset zoom" aria-label="Reset zoom" onclick="App.editor.resetView()">100%</button>
+        <button class="btn btn-ghost btn-icon" type="button" title="Zoom in" aria-label="Zoom in"
+                onclick="App.editor.zoomIn()">+</button>
+        <button class="btn btn-secondary btn-sm" type="button" title="Center map"
+                onclick="App.editor.centerView()">Center</button>
+      </div>
+
       <!-- Editor palette (hidden by default) -->
       <div id="editor-palette" class="hidden">
         <h4>Tile Palette</h4>
