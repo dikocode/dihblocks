@@ -33,7 +33,7 @@
       <button class="auth-tab active" id="tab-login"  onclick="App.auth.showTab('login')">Sign In</button>
       <button class="auth-tab"        id="tab-register" onclick="App.auth.showTab('register')">Create Account</button>
     </div>
-    <form id="form-login" class="auth-form" onsubmit="event.preventDefault(); App.auth.login();">
+    <div id="form-login" class="auth-form">
       <div class="field">
         <label for="login-username">Username</label>
         <input type="text" id="login-username" placeholder="Enter username" maxlength="24" autocomplete="username"/>
@@ -43,9 +43,9 @@
         <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password"/>
       </div>
       <div id="login-error" class="alert alert-error hidden"></div>
-      <button class="btn btn-primary submit-btn" id="login-btn" type="submit">Sign In</button>
-    </form>
-    <form id="form-register" class="auth-form hidden" onsubmit="event.preventDefault(); App.auth.register();">
+      <button class="btn btn-primary submit-btn" id="login-btn" onclick="App.auth.login()">Sign In</button>
+    </div>
+    <div id="form-register" class="auth-form hidden">
       <div class="field">
         <label for="reg-username">Username <span class="muted small">(3–24 chars, letters/numbers/_)</span></label>
         <input type="text" id="reg-username" placeholder="Choose a username" maxlength="24" autocomplete="username"/>
@@ -60,8 +60,8 @@
       </div>
       <div id="reg-error"   class="alert alert-error   hidden"></div>
       <div id="reg-success" class="alert alert-success hidden"></div>
-      <button class="btn btn-primary submit-btn" id="register-btn" type="submit">Create Account</button>
-    </form>
+      <button class="btn btn-primary submit-btn" id="register-btn" onclick="App.auth.register()">Create Account</button>
+    </div>
   </div>
 </div>
 
@@ -215,7 +215,7 @@
           </button>
         </div>
         <div class="studio-section">
-          <span class="small muted section-label">Brush</span>
+          <label class="small muted">Brush</label>
           <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:4px" onclick="App.editor.clearMap()">Clear Map</button>
         </div>
       </div>
@@ -246,11 +246,11 @@
           <input type="text" id="studio-map-title" placeholder="Untitled World" maxlength="60"/>
         </div>
         <div class="studio-section">
-          <span class="small muted section-label">Selected Tile</span>
+          <label class="small muted">Selected Tile</label>
           <div id="inspector-selection" class="empty-state small">Nothing selected</div>
         </div>
         <div class="studio-section">
-          <span class="small muted section-label">Statistics</span>
+          <label class="small muted">Statistics</label>
           <div id="inspector-stats" class="stats-grid">
             <div><span class="stat-label">Tiles</span><span class="stat-value" id="stat-tiles">0</span></div>
             <div><span class="stat-label">Players</span><span class="stat-value" id="stat-players">0</span></div>
@@ -367,7 +367,7 @@
     <div class="modal-body">
       <div style="display:flex;flex-direction:column;gap:18px">
         <div class="field">
-          <span id="render-mode-label" class="settings-group-label">Rendering Mode</span>
+          <label id="render-mode-label">Rendering Mode</label>
           <div class="settings-toggle-row" role="radiogroup" aria-labelledby="render-mode-label">
             <button id="mode-preloader" class="btn btn-secondary btn-sm mode-toggle active" onclick="App.settings.setRenderMode('preloader')">Pre-loader</button>
             <button id="mode-chunk" class="btn btn-secondary btn-sm mode-toggle" onclick="App.settings.setRenderMode('chunk')">Chunk Loader</button>
@@ -385,7 +385,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="scripting.js"></script>
 <script src="app.js"></script>
-<script src="game.js"></script>
 <script>
   /* UI-only stub for the Settings modal so the new Settings button works
      even when the full game App object is not yet loaded. The actual
