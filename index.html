@@ -35,11 +35,11 @@
     </div>
     <div id="form-login" class="auth-form">
       <div class="field">
-        <label>Username</label>
+        <label for="login-username">Username</label>
         <input type="text" id="login-username" placeholder="Enter username" maxlength="24" autocomplete="username"/>
       </div>
       <div class="field">
-        <label>Password</label>
+        <label for="login-password">Password</label>
         <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password"/>
       </div>
       <div id="login-error" class="alert alert-error hidden"></div>
@@ -47,15 +47,15 @@
     </div>
     <div id="form-register" class="auth-form hidden">
       <div class="field">
-        <label>Username <span class="muted small">(3–24 chars, letters/numbers/_)</span></label>
+        <label for="reg-username">Username <span class="muted small">(3–24 chars, letters/numbers/_)</span></label>
         <input type="text" id="reg-username" placeholder="Choose a username" maxlength="24" autocomplete="username"/>
       </div>
       <div class="field">
-        <label>Password <span class="muted small">(min 6 chars)</span></label>
+        <label for="reg-password">Password <span class="muted small">(min 6 chars)</span></label>
         <input type="password" id="reg-password" placeholder="Choose a password" autocomplete="new-password"/>
       </div>
       <div class="field">
-        <label>Confirm Password</label>
+        <label for="reg-confirm">Confirm Password</label>
         <input type="password" id="reg-confirm" placeholder="Repeat password" autocomplete="new-password"/>
       </div>
       <div id="reg-error"   class="alert alert-error   hidden"></div>
@@ -86,7 +86,7 @@
       </div>
       <div class="home-section">
         <div class="field">
-          <label>Search worlds</label>
+          <label for="home-search">Search worlds</label>
           <input type="text" id="home-search" placeholder="Filter maps…" oninput="App.home.searchMaps()"/>
         </div>
       </div>
@@ -123,6 +123,7 @@
       <button class="btn btn-secondary btn-sm" onclick="App.modals.openSaveMap()">Publish</button>
       <button class="btn btn-accent btn-sm"    onclick="App.editor.toggle()">Creator Studio</button>
       <button class="btn btn-ghost btn-sm"      onclick="App.toggleChat()">Chat</button>
+      <button class="btn btn-ghost btn-sm"      onclick="App.modals.openSettings()">Settings</button>
       <button class="btn btn-ghost btn-sm"      onclick="App.home.returnToBrowser()">Worlds</button>
       <button class="btn btn-ghost btn-sm"      onclick="App.auth.logout()">Sign Out</button>
     </div>
@@ -155,7 +156,8 @@
       <div class="panel-subheader">Live Chat</div>
       <div id="chat-messages"></div>
       <div id="chat-input-wrap">
-        <input type="text" id="chat-input" placeholder="Say something… (T to focus)" maxlength="120"/>
+        <label for="chat-input" class="visually-hidden">Chat message</label>
+        <input type="text" id="chat-input" placeholder="Say something… (T to focus)" maxlength="120" aria-label="Chat message"/>
         <button class="btn btn-primary btn-sm" id="chat-send" onclick="App.chat.send()">↵</button>
       </div>
     </div>
@@ -240,7 +242,7 @@
       </div>
       <div id="right-tab-inspector" class="panel-tab-body">
         <div class="studio-section">
-          <label>Map Title</label>
+          <label for="studio-map-title">Map Title</label>
           <input type="text" id="studio-map-title" placeholder="Untitled World" maxlength="60"/>
         </div>
         <div class="studio-section">
@@ -262,6 +264,7 @@
           <button class="script-tab" onclick="App.studio.switchScriptTab('python',this)">Python</button>
           <button class="script-tab" onclick="App.studio.switchScriptTab('js',this)">JavaScript</button>
         </div>
+        <label for="script-editor" class="visually-hidden">Script editor</label>
         <textarea id="script-editor" spellcheck="false" placeholder="Write your script here…" oninput="App.studio.saveScriptSource()"></textarea>
         <div class="script-actions">
           <button class="btn btn-primary btn-sm" onclick="App.studio.runScript()">▶ Run</button>
@@ -288,39 +291,39 @@
       </div>
       <div class="customizer-grid">
         <div class="color-field">
-          <label>Head Color</label>
+          <label for="color-head">Head Color</label>
           <div class="color-row">
             <input type="color" id="color-head" value="#f5c842" oninput="App.modals.updatePreview()"/>
-            <input type="text" id="color-head-hex" placeholder="#f5c842" style="width:90px" oninput="App.modals.syncColor('head')"/>
+            <input type="text" id="color-head-hex" placeholder="#f5c842" style="width:90px" oninput="App.modals.syncColor('head')" aria-label="Head color hex"/>
           </div>
         </div>
         <div class="color-field">
-          <label>Torso Color</label>
+          <label for="color-torso">Torso Color</label>
           <div class="color-row">
             <input type="color" id="color-torso" value="#3a8bff" oninput="App.modals.updatePreview()"/>
-            <input type="text" id="color-torso-hex" placeholder="#3a8bff" style="width:90px" oninput="App.modals.syncColor('torso')"/>
+            <input type="text" id="color-torso-hex" placeholder="#3a8bff" style="width:90px" oninput="App.modals.syncColor('torso')" aria-label="Torso color hex"/>
           </div>
         </div>
         <div class="color-field">
-          <label>Leg Color</label>
+          <label for="color-legs">Leg Color</label>
           <div class="color-row">
             <input type="color" id="color-legs" value="#2c3e50" oninput="App.modals.updatePreview()"/>
-            <input type="text" id="color-legs-hex" placeholder="#2c3e50" style="width:90px" oninput="App.modals.syncColor('legs')"/>
+            <input type="text" id="color-legs-hex" placeholder="#2c3e50" style="width:90px" oninput="App.modals.syncColor('legs')" aria-label="Leg color hex"/>
           </div>
         </div>
         <div class="color-field">
-          <label>Arm Color</label>
+          <label for="color-arms">Arm Color</label>
           <div class="color-row">
             <input type="color" id="color-arms" value="#f5c842" oninput="App.modals.updatePreview()"/>
-            <input type="text" id="color-arms-hex" placeholder="#f5c842" style="width:90px" oninput="App.modals.syncColor('arms')"/>
+            <input type="text" id="color-arms-hex" placeholder="#f5c842" style="width:90px" oninput="App.modals.syncColor('arms')" aria-label="Arm color hex"/>
           </div>
         </div>
         <div class="color-field full-col">
-          <label>Shirt Image URL <span class="muted small">(optional)</span></label>
+          <label for="shirt-url">Shirt Image URL <span class="muted small">(optional)</span></label>
           <input type="url" id="shirt-url" placeholder="https://example.com/shirt.png" oninput="App.modals.updatePreview()"/>
         </div>
         <div class="color-field full-col">
-          <label>Hat / Accessory URL <span class="muted small">(optional)</span></label>
+          <label for="hat-url">Hat / Accessory URL <span class="muted small">(optional)</span></label>
           <input type="url" id="hat-url" placeholder="https://example.com/hat.png" oninput="App.modals.updatePreview()"/>
         </div>
       </div>
@@ -341,7 +344,7 @@
     <div class="modal-body">
       <div id="save-map-form" style="display:flex;flex-direction:column;gap:14px">
         <div class="field">
-          <label>World Title</label>
+          <label for="map-title">World Title</label>
           <input type="text" id="map-title" placeholder="My Awesome World" maxlength="60"/>
         </div>
         <div id="save-map-error"   class="alert alert-error   hidden"></div>
@@ -355,8 +358,67 @@
   </div>
 </div>
 
+<div id="modal-settings" class="modal-overlay hidden">
+  <div class="modal" style="width:min(420px,100%)">
+    <div class="modal-header">
+      <h3>Settings</h3>
+      <button class="modal-close" onclick="App.modals.closeSettings()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="field">
+          <label id="render-mode-label">Rendering Mode</label>
+          <div class="settings-toggle-row" role="radiogroup" aria-labelledby="render-mode-label">
+            <button id="mode-preloader" class="btn btn-secondary btn-sm mode-toggle active" onclick="App.settings.setRenderMode('preloader')">Pre-loader</button>
+            <button id="mode-chunk" class="btn btn-secondary btn-sm mode-toggle" onclick="App.settings.setRenderMode('chunk')">Chunk Loader</button>
+          </div>
+          <p class="muted small" id="render-mode-desc">Pre-loader loads the full world map at start.</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="App.modals.closeSettings()">Close</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="scripting.js"></script>
 <script src="app.js"></script>
+<script>
+  /* UI-only stub for the Settings modal so the new Settings button works
+     even when the full game App object is not yet loaded. The actual
+     rendering-mode behaviour must be wired into the game engine. */
+  (function() {
+    window.App = window.App || {};
+    window.App.settings = window.App.settings || {
+      renderMode: 'preloader',
+      setRenderMode: function(mode) {
+        this.renderMode = mode === 'chunk' ? 'chunk' : 'preloader';
+        const desc = document.getElementById('render-mode-desc');
+        const preBtn = document.getElementById('mode-preloader');
+        const chunkBtn = document.getElementById('mode-chunk');
+        if (this.renderMode === 'chunk') {
+          if (desc) desc.textContent = 'Chunk Loader renders only visible screen chunks around the player.';
+          if (preBtn) preBtn.classList.remove('active');
+          if (chunkBtn) chunkBtn.classList.add('active');
+        } else {
+          if (desc) desc.textContent = 'Pre-loader loads the full world map at start.';
+          if (preBtn) preBtn.classList.add('active');
+          if (chunkBtn) chunkBtn.classList.remove('active');
+        }
+      }
+    };
+    window.App.modals = window.App.modals || {};
+    window.App.modals.openSettings = function() {
+      const el = document.getElementById('modal-settings');
+      if (el) el.classList.remove('hidden');
+    };
+    window.App.modals.closeSettings = function() {
+      const el = document.getElementById('modal-settings');
+      if (el) el.classList.add('hidden');
+    };
+  })();
+</script>
 </body>
 </html>
