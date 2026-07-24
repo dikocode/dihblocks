@@ -1,0 +1,186 @@
+diff --git a/app.js b/app.js
+index dc1f036..9f24538 100644
+--- a/app.js
++++ b/app.js
+@@ -151,6 +151,10 @@ const state = {
+     distance: 0,
+     centerX: 0,
+     centerY: 0,
++    singleFinger: false,
++    lastX: 0,
++    lastY: 0,
++    moved: false,
+   },
+ };
+ 
+@@ -245,9 +249,21 @@ window.addEventListener('keydown', e => {
+ 
+   const gameIsActive = Boolean(state.localPlayer && !state.editorMode);
+   const editorUsesSpace = state.editorMode && e.code === 'Space';
+-  if ((gameIsActive && isGameControlKey(e.code)) || editorUsesSpace) {
++  const editorUsesNavigation = state.editorMode && [
++    'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
++    'Equal', 'NumpadAdd', 'Minus', 'NumpadSubtract',
++  ].includes(e.code);
++  if ((gameIsActive && isGameControlKey(e.code)) || editorUsesSpace || editorUsesNavigation) {
+     e.preventDefault();
+   }
++  if (editorUsesNavigation && !e.repeat) {
++    if (e.code === 'ArrowLeft')  panEditorByScreenDelta(-80, 0);
++    if (e.code === 'ArrowRight') panEditorByScreenDelta(80, 0);
++    if (e.code === 'ArrowUp')    panEditorByScreenDelta(0, -80);
++    if (e.code === 'ArrowDown')  panEditorByScreenDelta(0, 80);
++    if (e.code === 'Equal' || e.code === 'NumpadAdd') setEditorZoom(state.editorZoom * 1.2);
++    if (e.code === 'Minus' || e.code === 'NumpadSubtract') setEditorZoom(state.editorZoom / 1.2);
++  }
+   if (e.code === 'KeyE' && gameIsActive && !e.repeat) App.dance();
+ });
+ window.addEventListener('keyup', e => {
+@@ -714,6 +730,15 @@ function clampCamera() {
+   state.camera.y = Math.max(0, Math.min(state.camera.y, maxY));
+ }
+ 
++function panEditorByScreenDelta(deltaX, deltaY) {
++  const rect = canvas.getBoundingClientRect();
++  const scaleX = canvas.width / rect.width;
++  const scaleY = canvas.height / rect.height;
++  state.camera.x -= deltaX * scaleX / state.editorZoom;
++  state.camera.y -= deltaY * scaleY / state.editorZoom;
++  clampCamera();
++}
++
+ function setEditorZoom(nextZoom, anchorX = canvas.width / 2, anchorY = canvas.height / 2) {
+   const oldZoom = state.editorZoom;
+   const newZoom = Math.max(0.25, Math.min(4, nextZoom));
+@@ -928,7 +953,7 @@ function renderFrame(localP) {
+     ctx.font = 'bold 14px Segoe UI, sans-serif';
+     ctx.fillStyle = '#e94560';
+     ctx.textAlign = 'left';
+-    ctx.fillText('🛠 EDITOR MODE — Click to place • Right-click to erase • Space + drag to pan', 12 / zoom, (canvas.height - 12) / zoom);
++    ctx.fillText('🛠 EDITOR — Click to place • Right-click to erase • Space + drag or touch-drag to pan • Ctrl/⌘ + wheel to zoom', 12 / zoom, (canvas.height - 12) / zoom);
+   }
+ }
+ 
+@@ -1621,18 +1646,13 @@ function initEditorListeners() {
+   canvas.addEventListener('mousemove', e => {
+     if (!state.editorMode || !state.mouseDown) return;
+     if (state.isPanning) {
+-      const rect = canvas.getBoundingClientRect();
+-      state.camera.x -= (e.clientX - state.panLastX) / (rect.width / canvas.width) / state.editorZoom;
+-      state.camera.y -= (e.clientY - state.panLastY) / (rect.height / canvas.height) / state.editorZoom;
++      panEditorByScreenDelta(e.clientX - state.panLastX, e.clientY - state.panLastY);
+       state.panLastX = e.clientX;
+       state.panLastY = e.clientY;
+-      clampCamera();
+       return;
+     }
+-    if (state.mouseDown) {
+-      state.isDragging = true;
+-      editorCanvasClick(e, e.buttons === 2);
+-    }
++    state.isDragging = true;
++    editorCanvasClick(e, e.buttons === 2);
+   });
+   const stopPointer = () => {
+     state.mouseDown = false;
+@@ -1648,26 +1668,33 @@ function initEditorListeners() {
+     const rect = canvas.getBoundingClientRect();
+     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+-    const isPinch = e.ctrlKey;
+-    const isMouseWheel = Math.abs(e.deltaY) >= 40 && !e.deltaX;
+-
+-    if (isPinch || isMouseWheel) {
++    if (e.ctrlKey || e.metaKey) {
+       setEditorZoom(state.editorZoom * Math.exp(-e.deltaY * 0.0015), x, y);
+       return;
+     }
+-
+-    // Small two-finger trackpad scrolls pan the editor viewport.
+-    state.camera.x += (e.deltaX || (e.shiftKey ? e.deltaY : 0)) / state.editorZoom;
+-    state.camera.y += (!e.shiftKey ? e.deltaY : 0) / state.editorZoom;
++    const scaleX = canvas.width / rect.width;
++    const scaleY = canvas.height / rect.height;
++    state.camera.x += (e.deltaX || (e.shiftKey ? e.deltaY : 0)) * scaleX / state.editorZoom;
++    state.camera.y += (e.shiftKey ? 0 : e.deltaY) * scaleY / state.editorZoom;
+     clampCamera();
+   }, { passive: false });
+ 
+   canvas.addEventListener('touchstart', e => {
+-    if (!state.editorMode || e.touches.length < 2) return;
++    if (!state.editorMode) return;
+     e.preventDefault();
++    if (e.touches.length === 1) {
++      const t = e.touches[0];
++      state.editorTouch.active = true;
++      state.editorTouch.singleFinger = true;
++      state.editorTouch.lastX = t.clientX;
++      state.editorTouch.lastY = t.clientY;
++      state.editorTouch.moved = false;
++      return;
++    }
+     const first = e.touches[0];
+     const second = e.touches[1];
+     state.editorTouch.active = true;
++    state.editorTouch.singleFinger = false;
+     state.editorTouch.distance = Math.hypot(
+       second.clientX - first.clientX,
+       second.clientY - first.clientY
+@@ -1677,8 +1704,20 @@ function initEditorListeners() {
+   }, { passive: false });
+ 
+   canvas.addEventListener('touchmove', e => {
+-    if (!state.editorMode || !state.editorTouch.active || e.touches.length < 2) return;
++    if (!state.editorMode || !state.editorTouch.active) return;
+     e.preventDefault();
++    if (e.touches.length === 1 && state.editorTouch.singleFinger) {
++      const t = e.touches[0];
++      const dx = t.clientX - state.editorTouch.lastX;
++      const dy = t.clientY - state.editorTouch.lastY;
++      if (Math.hypot(dx, dy) > 0) state.editorTouch.moved = true;
++      panEditorByScreenDelta(dx, dy);
++      state.editorTouch.lastX = t.clientX;
++      state.editorTouch.lastY = t.clientY;
++      return;
++    }
++    if (e.touches.length < 2) return;
++    state.editorTouch.singleFinger = false;
+     const first = e.touches[0];
+     const second = e.touches[1];
+     const distance = Math.hypot(
+@@ -1700,21 +1739,28 @@ function initEditorListeners() {
+         anchorY
+       );
+     }
+-
+-    state.camera.x -= (centerX - state.editorTouch.centerX) * scaleX / state.editorZoom;
+-    state.camera.y -= (centerY - state.editorTouch.centerY) * scaleY / state.editorZoom;
+-    clampCamera();
++    panEditorByScreenDelta(
++      centerX - state.editorTouch.centerX,
++      centerY - state.editorTouch.centerY
++    );
+     state.editorTouch.distance = distance;
+     state.editorTouch.centerX = centerX;
+     state.editorTouch.centerY = centerY;
+   }, { passive: false });
+ 
+-  const stopTouchGesture = () => {
++  const resetTouchGesture = () => {
+     state.editorTouch.active = false;
++    state.editorTouch.singleFinger = false;
+     state.editorTouch.distance = 0;
++    state.editorTouch.moved = false;
+   };
+-  canvas.addEventListener('touchend', stopTouchGesture, { passive: true });
+-  canvas.addEventListener('touchcancel', stopTouchGesture, { passive: true });
++  canvas.addEventListener('touchend', e => {
++    if (state.editorTouch.singleFinger && !state.editorTouch.moved && e.changedTouches[0]) {
++      editorCanvasClick(e.changedTouches[0], false);
++    }
++    resetTouchGesture();
++  }, { passive: false });
++  canvas.addEventListener('touchcancel', resetTouchGesture, { passive: false });
+ }
+ 
+ /* ══════════════════════════════════════════════════════════
