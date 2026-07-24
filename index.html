@@ -3,142 +3,144 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <meta name="theme-color" content="#0a0a12"/>
+  <meta name="theme-color" content="#1a1a2e"/>
   <meta name="description" content="Dihblocks – 2D Multiplayer Browser Game Platform"/>
   <title>Dihblocks</title>
-  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
 
 <!-- ══════════════════════════════════════════════════════
      LOADING OVERLAY
-   ══════════════════════════════════════════════════════ -->
+══════════════════════════════════════════════════════ -->
 <div id="loading-overlay">
   <div class="loader-logo">Dihblocks</div>
   <div class="loader-bar-wrap"><div class="loader-bar"></div></div>
-  <div class="loader-text">Starting engine…</div>
+  <div class="loader-text">Connecting to world…</div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════
      AUTH SCREEN
-   ══════════════════════════════════════════════════════ -->
+══════════════════════════════════════════════════════ -->
 <div id="screen-auth" class="hidden">
   <div class="auth-box">
     <div class="auth-logo">
       <h1>Dihblocks</h1>
-      <div class="tagline">Create. Play. Together.</div>
+      <div class="tagline">2D Multiplayer Platform • Build • Explore • Play</div>
     </div>
+
+    <!-- Tabs -->
     <div class="auth-tabs">
       <button class="auth-tab active" id="tab-login"  onclick="App.auth.showTab('login')">Sign In</button>
       <button class="auth-tab"        id="tab-register" onclick="App.auth.showTab('register')">Create Account</button>
     </div>
-    <form id="form-login" class="auth-form" onsubmit="event.preventDefault(); App.auth.login();">
+
+    <!-- Login Form -->
+    <div id="form-login" class="auth-form">
       <div class="field">
-        <label for="login-username">Username</label>
+        <label>Username</label>
         <input type="text" id="login-username" placeholder="Enter username" maxlength="24" autocomplete="username"/>
       </div>
       <div class="field">
-        <label for="login-password">Password</label>
+        <label>Password</label>
         <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password"/>
       </div>
       <div id="login-error" class="alert alert-error hidden"></div>
-      <button class="btn btn-primary submit-btn" id="login-btn" type="submit">Sign In</button>
-    </form>
-    <form id="form-register" class="auth-form hidden" onsubmit="event.preventDefault(); App.auth.register();">
+      <button class="btn btn-primary submit-btn" id="login-btn" onclick="App.auth.login()">Sign In</button>
+    </div>
+
+    <!-- Register Form -->
+    <div id="form-register" class="auth-form hidden">
       <div class="field">
-        <label for="reg-username">Username <span class="muted small">(3–24 chars, letters/numbers/_)</span></label>
+        <label>Username <span class="muted small">(3–24 chars, letters/numbers/_)</span></label>
         <input type="text" id="reg-username" placeholder="Choose a username" maxlength="24" autocomplete="username"/>
       </div>
       <div class="field">
-        <label for="reg-password">Password <span class="muted small">(min 6 chars)</span></label>
+        <label>Password <span class="muted small">(min 6 chars)</span></label>
         <input type="password" id="reg-password" placeholder="Choose a password" autocomplete="new-password"/>
       </div>
       <div class="field">
-        <label for="reg-confirm">Confirm Password</label>
+        <label>Confirm Password</label>
         <input type="password" id="reg-confirm" placeholder="Repeat password" autocomplete="new-password"/>
       </div>
       <div id="reg-error"   class="alert alert-error   hidden"></div>
       <div id="reg-success" class="alert alert-success hidden"></div>
-      <button class="btn btn-primary submit-btn" id="register-btn" type="submit">Create Account</button>
-    </form>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════
-     HOME SCREEN — MAP BROWSER
-   ══════════════════════════════════════════════════════ -->
-<div id="screen-home" class="hidden">
-  <div id="home-topbar">
-    <div class="brand">Dihblocks</div>
-    <div class="home-actions">
-      <button class="btn btn-ghost btn-sm" onclick="App.auth.logout()">Sign Out</button>
-    </div>
-  </div>
-  <div id="home-main">
-    <div id="home-sidebar">
-      <div class="home-section">
-        <h3>Welcome, <span id="home-username">—</span></h3>
-        <p class="muted small">Choose a world to join, or build a new one from a clean baseplate.</p>
-      </div>
-      <div class="home-section">
-        <button class="btn btn-success" onclick="App.home.createNewMap()" style="width:100%">＋ Create New World</button>
-      </div>
-      <div class="home-section">
-        <div class="field">
-          <label for="home-search">Search worlds</label>
-          <input type="text" id="home-search" placeholder="Filter maps…" oninput="App.home.searchMaps()"/>
-        </div>
-      </div>
-      <div class="home-section">
-        <button class="btn btn-secondary btn-sm" onclick="App.home.refreshMaps()">↻ Refresh</button>
-      </div>
-    </div>
-    <div id="home-content">
-      <div class="home-header">
-        <h2>World Browser</h2>
-        <div class="home-tabs">
-          <button class="home-tab active" onclick="App.home.setTab('all',this)">All Worlds</button>
-          <button class="home-tab" onclick="App.home.setTab('mine',this)">My Worlds</button>
-        </div>
-      </div>
-      <div id="map-grid" class="map-grid">
-        <div class="empty-state">Loading worlds…</div>
-      </div>
+      <button class="btn btn-primary submit-btn" id="register-btn" onclick="App.auth.register()">Create Account</button>
     </div>
   </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════
      GAME SCREEN
-   ══════════════════════════════════════════════════════ -->
+══════════════════════════════════════════════════════ -->
 <div id="screen-game" class="hidden">
+
+  <!-- Top Bar -->
   <div id="topbar">
     <span class="brand">Dihblocks</span>
     <div class="topbar-sep"></div>
     <div class="player-info">Playing as <strong id="topbar-username">—</strong></div>
     <div class="topbar-sep"></div>
     <div class="topbar-actions">
-      <button class="btn btn-secondary btn-sm" onclick="App.modals.openCustomizer()">Avatar</button>
-      <button class="btn btn-secondary btn-sm" onclick="App.modals.openSaveMap()">Publish</button>
-      <button class="btn btn-accent btn-sm"    onclick="App.editor.toggle()">Creator Studio</button>
-      <button class="btn btn-ghost btn-sm"      onclick="App.toggleChat()">Chat</button>
-      <button class="btn btn-ghost btn-sm"      onclick="App.modals.openSettings()">Settings</button>
-      <button class="btn btn-ghost btn-sm"      onclick="App.home.returnToBrowser()">Worlds</button>
-      <button class="btn btn-ghost btn-sm"      onclick="App.auth.logout()">Sign Out</button>
+      <button class="btn btn-secondary btn-sm" onclick="App.modals.openCustomizer()">🎨 Avatar</button>
+      <button class="btn btn-secondary btn-sm" onclick="App.modals.openMapBrowser()">🗂 Maps</button>
+      <button class="btn btn-secondary btn-sm" onclick="App.editor.toggle()">🛠 Editor</button>
+      <button class="btn btn-ghost     btn-sm" onclick="App.toggleChat()">💬</button>
+      <button class="btn btn-ghost     btn-sm" onclick="App.auth.logout()">Sign Out</button>
     </div>
   </div>
 
+  <!-- Main layout -->
   <div id="game-layout">
+
+    <!-- Canvas -->
     <div id="canvas-wrap">
       <canvas id="gameCanvas"></canvas>
       <div id="ping-display">● 0ms</div>
       <div id="player-count">0 players</div>
       <div id="notification-area"></div>
+
+      <!-- Editor palette (hidden by default) -->
+      <div id="editor-palette" class="hidden">
+        <h4>Tile Palette</h4>
+        <button class="tile-btn selected" data-tile="platform" onclick="App.editor.selectTile('platform',this)">
+          <span class="tile-color" style="background:#4a9eff"></span> Platform
+        </button>
+        <button class="tile-btn" data-tile="ground" onclick="App.editor.selectTile('ground',this)">
+          <span class="tile-color" style="background:#5c8a3c"></span> Ground
+        </button>
+        <button class="tile-btn" data-tile="hazard" onclick="App.editor.selectTile('hazard',this)">
+          <span class="tile-color" style="background:#e74c3c"></span> Hazard (Spike)
+        </button>
+        <button class="tile-btn" data-tile="spawn" onclick="App.editor.selectTile('spawn',this)">
+          <span class="tile-color" style="background:#f5a623"></span> Spawn Point
+        </button>
+        <button class="tile-btn" data-tile="lava" onclick="App.editor.selectTile('lava',this)">
+          <span class="tile-color" style="background:#ff6b00"></span> Lava
+        </button>
+        <button class="tile-btn" data-tile="ice" onclick="App.editor.selectTile('ice',this)">
+          <span class="tile-color" style="background:#aef0ff"></span> Ice
+        </button>
+        <button class="tile-btn" data-tile="bounce" onclick="App.editor.selectTile('bounce',this)">
+          <span class="tile-color" style="background:#c678dd"></span> Bounce Pad
+        </button>
+        <button class="tile-btn" data-tile="erase" onclick="App.editor.selectTile('erase',this)">
+          <span class="tile-color" style="background:#333"></span> Erase
+        </button>
+        <hr style="border-color:var(--border);margin:4px 0"/>
+        <button class="btn btn-success btn-sm" onclick="App.modals.openSaveMap()" style="width:100%">💾 Save Map</button>
+        <button class="btn btn-ghost btn-sm"   onclick="App.editor.clearMap()"    style="width:100%;margin-top:4px">🗑 Clear</button>
+      </div>
+
+      <!-- Mobile Controls -->
       <div id="mobile-controls">
+        <!-- Left joystick -->
         <div id="joystick-zone">
-          <div id="joystick-base"><div id="joystick-thumb"></div></div>
+          <div id="joystick-base">
+            <div id="joystick-thumb"></div>
+          </div>
         </div>
+        <!-- Right buttons -->
         <div id="action-buttons">
           <div class="action-btn" id="btn-jump"  ontouchstart="App.mobile.jumpStart()"  ontouchend="App.mobile.jumpEnd()">JUMP</div>
           <div class="action-btn" id="btn-dance" ontouchstart="App.mobile.danceStart()" ontouchend="App.mobile.danceEnd()">DANCE</div>
@@ -146,280 +148,144 @@
       </div>
     </div>
 
+    <!-- Side Panel (Chat) -->
     <div id="side-panel">
       <div class="panel-header">
-        <span>World</span>
+        <span>🌐 World</span>
         <button class="btn-ghost btn btn-sm" onclick="App.toggleChat()">✕</button>
       </div>
-      <div class="panel-subheader">Players Online</div>
+      <div class="panel-header" style="font-size:0.75rem;color:var(--muted);padding:6px 12px;border-bottom:1px solid var(--border);">PLAYERS ONLINE</div>
       <div id="player-list"></div>
-      <div class="panel-subheader">Live Chat</div>
+      <div class="panel-header" style="font-size:0.75rem;color:var(--muted);padding:6px 12px;border-bottom:1px solid var(--border);">LIVE CHAT</div>
       <div id="chat-messages"></div>
       <div id="chat-input-wrap">
-        <label for="chat-input" class="visually-hidden">Chat message</label>
-        <input type="text" id="chat-input" placeholder="Say something… (T to focus)" maxlength="120" aria-label="Chat message"/>
+        <input type="text" id="chat-input" placeholder="Say something…" maxlength="120"
+               onkeydown="if(event.key==='Enter')App.chat.send()"/>
         <button class="btn btn-primary btn-sm" id="chat-send" onclick="App.chat.send()">↵</button>
       </div>
     </div>
   </div>
 
+  <!-- Bottom Toolbar -->
   <div id="bottom-toolbar">
-    <span class="small muted">WASD / Arrows = Move &nbsp;|&nbsp; Space = Jump &nbsp;|&nbsp; E = Dance &nbsp;|&nbsp; T = Chat</span>
+    <span class="small muted">WASD / Arrows = Move &nbsp;|&nbsp; Space = Jump &nbsp;|&nbsp; E = Dance</span>
     <div class="topbar-sep"></div>
     <div id="mode-display"><span class="mode-badge" id="mode-badge">PLAY</span></div>
   </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════
-     CREATOR STUDIO OVERLAY
-   ══════════════════════════════════════════════════════ -->
-<div id="creator-studio" class="hidden">
-  <div id="studio-topbar">
-    <div class="studio-title">🛠 Creator Studio</div>
-    <div class="studio-actions">
-      <button class="btn btn-sm btn-secondary" onclick="App.editor.toggle()">Back to Play</button>
-      <button class="btn btn-sm btn-success"  onclick="App.modals.openSaveMap()">Publish</button>
-    </div>
-  </div>
-  <div id="studio-body">
-    <div id="studio-left" class="studio-panel">
-      <div class="panel-tabs">
-        <button class="panel-tab active" onclick="App.studio.switchLeftTab('tools',this)">Tools</button>
-        <button class="panel-tab" onclick="App.studio.switchLeftTab('assets',this)">Assets</button>
-      </div>
-      <div id="left-tab-tools" class="panel-tab-body">
-        <div class="tool-grid">
-          <button class="tool-btn selected" data-tile="platform" onclick="App.editor.selectTile('platform',this)">
-            <span class="tile-swatch" style="background:#4a9eff"></span> Platform
-          </button>
-          <button class="tool-btn" data-tile="ground" onclick="App.editor.selectTile('ground',this)">
-            <span class="tile-swatch" style="background:#5c8a3c"></span> Ground
-          </button>
-          <button class="tool-btn" data-tile="hazard" onclick="App.editor.selectTile('hazard',this)">
-            <span class="tile-swatch" style="background:#e74c3c"></span> Hazard
-          </button>
-          <button class="tool-btn" data-tile="spawn" onclick="App.editor.selectTile('spawn',this)">
-            <span class="tile-swatch" style="background:#f5a623"></span> Spawn
-          </button>
-          <button class="tool-btn" data-tile="lava" onclick="App.editor.selectTile('lava',this)">
-            <span class="tile-swatch" style="background:#ff6b00"></span> Lava
-          </button>
-          <button class="tool-btn" data-tile="ice" onclick="App.editor.selectTile('ice',this)">
-            <span class="tile-swatch" style="background:#aef0ff"></span> Ice
-          </button>
-          <button class="tool-btn" data-tile="bounce" onclick="App.editor.selectTile('bounce',this)">
-            <span class="tile-swatch" style="background:#c678dd"></span> Bounce
-          </button>
-          <button class="tool-btn" data-tile="erase" onclick="App.editor.selectTile('erase',this)">
-            <span class="tile-swatch" style="background:#333"></span> Erase
-          </button>
-        </div>
-        <div class="studio-section">
-          <span class="small muted section-label">Brush</span>
-          <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:4px" onclick="App.editor.clearMap()">Clear Map</button>
-        </div>
-      </div>
-      <div id="left-tab-assets" class="panel-tab-body hidden">
-        <div class="asset-list">
-          <div class="asset-item" onclick="App.studio.spawnAsset('crate')">📦 Crate</div>
-          <div class="asset-item" onclick="App.studio.spawnAsset('coin')">🪙 Coin</div>
-          <div class="asset-item" onclick="App.studio.spawnAsset('tree')">🌳 Tree</div>
-          <div class="asset-item" onclick="App.studio.spawnAsset('flag')">🚩 Flag</div>
-        </div>
-      </div>
-    </div>
-
-    <div id="studio-center" class="studio-panel">
-      <div id="studio-canvas-wrap">
-        <canvas id="studioCanvas"></canvas>
-      </div>
-    </div>
-
-    <div id="studio-right" class="studio-panel">
-      <div class="panel-tabs">
-        <button class="panel-tab active" onclick="App.studio.switchRightTab('inspector',this)">Inspector</button>
-        <button class="panel-tab" onclick="App.studio.switchRightTab('scripts',this)">Scripts</button>
-      </div>
-      <div id="right-tab-inspector" class="panel-tab-body">
-        <div class="studio-section">
-          <label for="studio-map-title">Map Title</label>
-          <input type="text" id="studio-map-title" placeholder="Untitled World" maxlength="60"/>
-        </div>
-        <div class="studio-section">
-          <span class="small muted section-label">Selected Tile</span>
-          <div id="inspector-selection" class="empty-state small">Nothing selected</div>
-        </div>
-        <div class="studio-section">
-          <span class="small muted section-label">Statistics</span>
-          <div id="inspector-stats" class="stats-grid">
-            <div><span class="stat-label">Tiles</span><span class="stat-value" id="stat-tiles">0</span></div>
-            <div><span class="stat-label">Players</span><span class="stat-value" id="stat-players">0</span></div>
-            <div><span class="stat-label">Spawns</span><span class="stat-value" id="stat-spawns">0</span></div>
-          </div>
-        </div>
-      </div>
-      <div id="right-tab-scripts" class="panel-tab-body hidden">
-        <div class="script-tabs">
-          <button class="script-tab active" onclick="App.studio.switchScriptTab('dihlang',this)">Dihlang</button>
-          <button class="script-tab" onclick="App.studio.switchScriptTab('python',this)">Python</button>
-          <button class="script-tab" onclick="App.studio.switchScriptTab('js',this)">JavaScript</button>
-        </div>
-        <label for="script-editor" class="visually-hidden">Script editor</label>
-        <textarea id="script-editor" spellcheck="false" placeholder="Write your script here…" oninput="App.studio.saveScriptSource()"></textarea>
-        <div class="script-actions">
-          <button class="btn btn-primary btn-sm" onclick="App.studio.runScript()">▶ Run</button>
-          <button class="btn btn-ghost btn-sm" onclick="App.studio.stopScript()">⏹ Stop</button>
-        </div>
-        <div id="script-console" class="script-console"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════
-     MODALS
-   ══════════════════════════════════════════════════════ -->
+     MODAL: CHARACTER CUSTOMIZER
+══════════════════════════════════════════════════════ -->
 <div id="modal-customizer" class="modal-overlay hidden">
   <div class="modal">
     <div class="modal-header">
-      <h3>Character Studio</h3>
+      <h3>🎨 Character Studio</h3>
       <button class="modal-close" onclick="App.modals.close('customizer')">✕</button>
     </div>
     <div class="modal-body">
+      <!-- Preview -->
       <div class="customizer-preview">
         <canvas id="customizer-canvas" width="120" height="160"></canvas>
       </div>
+      <!-- Color pickers -->
       <div class="customizer-grid">
         <div class="color-field">
-          <label for="color-head">Head Color</label>
+          <label>Head Color</label>
           <div class="color-row">
             <input type="color" id="color-head" value="#f5c842" oninput="App.modals.updatePreview()"/>
-            <input type="text" id="color-head-hex" placeholder="#f5c842" style="width:90px" oninput="App.modals.syncColor('head')" aria-label="Head color hex"/>
+            <input type="text" id="color-head-hex" placeholder="#f5c842" style="width:90px" oninput="App.modals.syncColor('head')"/>
           </div>
         </div>
         <div class="color-field">
-          <label for="color-torso">Torso Color</label>
+          <label>Torso Color</label>
           <div class="color-row">
             <input type="color" id="color-torso" value="#3a8bff" oninput="App.modals.updatePreview()"/>
-            <input type="text" id="color-torso-hex" placeholder="#3a8bff" style="width:90px" oninput="App.modals.syncColor('torso')" aria-label="Torso color hex"/>
+            <input type="text" id="color-torso-hex" placeholder="#3a8bff" style="width:90px" oninput="App.modals.syncColor('torso')"/>
           </div>
         </div>
         <div class="color-field">
-          <label for="color-legs">Leg Color</label>
+          <label>Leg Color</label>
           <div class="color-row">
             <input type="color" id="color-legs" value="#2c3e50" oninput="App.modals.updatePreview()"/>
-            <input type="text" id="color-legs-hex" placeholder="#2c3e50" style="width:90px" oninput="App.modals.syncColor('legs')" aria-label="Leg color hex"/>
+            <input type="text" id="color-legs-hex" placeholder="#2c3e50" style="width:90px" oninput="App.modals.syncColor('legs')"/>
           </div>
         </div>
         <div class="color-field">
-          <label for="color-arms">Arm Color</label>
+          <label>Arm Color</label>
           <div class="color-row">
             <input type="color" id="color-arms" value="#f5c842" oninput="App.modals.updatePreview()"/>
-            <input type="text" id="color-arms-hex" placeholder="#f5c842" style="width:90px" oninput="App.modals.syncColor('arms')" aria-label="Arm color hex"/>
+            <input type="text" id="color-arms-hex" placeholder="#f5c842" style="width:90px" oninput="App.modals.syncColor('arms')"/>
           </div>
         </div>
         <div class="color-field full-col">
-          <label for="shirt-url">Shirt Image URL <span class="muted small">(optional)</span></label>
+          <label>Shirt Image URL <span class="muted small">(optional, replaces torso color)</span></label>
           <input type="url" id="shirt-url" placeholder="https://example.com/shirt.png" oninput="App.modals.updatePreview()"/>
         </div>
         <div class="color-field full-col">
-          <label for="hat-url">Hat / Accessory URL <span class="muted small">(optional)</span></label>
+          <label>Hat / Accessory Image URL <span class="muted small">(optional)</span></label>
           <input type="url" id="hat-url" placeholder="https://example.com/hat.png" oninput="App.modals.updatePreview()"/>
         </div>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="App.modals.close('customizer')">Cancel</button>
-      <button class="btn btn-primary" onclick="App.modals.saveAppearance()">Save & Apply</button>
+      <button class="btn btn-ghost"    onclick="App.modals.close('customizer')">Cancel</button>
+      <button class="btn btn-primary"  onclick="App.modals.saveAppearance()">Save & Apply</button>
     </div>
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════
+     MODAL: MAP BROWSER
+══════════════════════════════════════════════════════ -->
+<div id="modal-mapbrowser" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>🗂 Map Browser</h3>
+      <button class="modal-close" onclick="App.modals.close('mapbrowser')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="map-list-container">
+        <div class="empty-state">Loading maps…</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="App.modals.refreshMaps()">↺ Refresh</button>
+      <button class="btn btn-ghost"     onclick="App.modals.close('mapbrowser')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     MODAL: SAVE MAP
+══════════════════════════════════════════════════════ -->
 <div id="modal-savemap" class="modal-overlay hidden">
   <div class="modal" style="width:min(380px,100%)">
     <div class="modal-header">
-      <h3>Publish World</h3>
+      <h3>💾 Publish Map</h3>
       <button class="modal-close" onclick="App.modals.close('savemap')">✕</button>
     </div>
     <div class="modal-body">
       <div id="save-map-form" style="display:flex;flex-direction:column;gap:14px">
         <div class="field">
-          <label for="map-title">World Title</label>
-          <input type="text" id="map-title" placeholder="My Awesome World" maxlength="60"/>
+          <label>Map Title</label>
+          <input type="text" id="map-title" placeholder="My Awesome Level" maxlength="60"/>
         </div>
         <div id="save-map-error"   class="alert alert-error   hidden"></div>
         <div id="save-map-success" class="alert alert-success hidden"></div>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="App.modals.close('savemap')">Cancel</button>
+      <button class="btn btn-ghost"   onclick="App.modals.close('savemap')">Cancel</button>
       <button class="btn btn-success" onclick="App.maps.saveCurrentMap()">Publish</button>
     </div>
   </div>
 </div>
 
-<div id="modal-settings" class="modal-overlay hidden">
-  <div class="modal" style="width:min(420px,100%)">
-    <div class="modal-header">
-      <h3>Settings</h3>
-      <button class="modal-close" onclick="App.modals.closeSettings()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="display:flex;flex-direction:column;gap:18px">
-        <div class="field">
-          <span id="render-mode-label" class="settings-group-label">Rendering Mode</span>
-          <div class="settings-toggle-row" role="radiogroup" aria-labelledby="render-mode-label">
-            <button id="mode-preloader" class="btn btn-secondary btn-sm mode-toggle active" onclick="App.settings.setRenderMode('preloader')">Pre-loader</button>
-            <button id="mode-chunk" class="btn btn-secondary btn-sm mode-toggle" onclick="App.settings.setRenderMode('chunk')">Chunk Loader</button>
-          </div>
-          <p class="muted small" id="render-mode-desc">Pre-loader loads the full world map at start.</p>
-        </div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="App.modals.closeSettings()">Close</button>
-    </div>
-  </div>
-</div>
-
+<!-- ══════════════════════════════════════════════════════
+     SUPABASE + APP
+══════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="scripting.js"></script>
 <script src="app.js"></script>
-<script src="game.js"></script>
-<script>
-  /* UI-only stub for the Settings modal so the new Settings button works
-     even when the full game App object is not yet loaded. The actual
-     rendering-mode behaviour must be wired into the game engine. */
-  (function() {
-    window.App = window.App || {};
-    window.App.settings = window.App.settings || {
-      renderMode: 'preloader',
-      setRenderMode: function(mode) {
-        this.renderMode = mode === 'chunk' ? 'chunk' : 'preloader';
-        const desc = document.getElementById('render-mode-desc');
-        const preBtn = document.getElementById('mode-preloader');
-        const chunkBtn = document.getElementById('mode-chunk');
-        if (this.renderMode === 'chunk') {
-          if (desc) desc.textContent = 'Chunk Loader renders only visible screen chunks around the player.';
-          if (preBtn) preBtn.classList.remove('active');
-          if (chunkBtn) chunkBtn.classList.add('active');
-        } else {
-          if (desc) desc.textContent = 'Pre-loader loads the full world map at start.';
-          if (preBtn) preBtn.classList.add('active');
-          if (chunkBtn) chunkBtn.classList.remove('active');
-        }
-      }
-    };
-    window.App.modals = window.App.modals || {};
-    window.App.modals.openSettings = function() {
-      const el = document.getElementById('modal-settings');
-      if (el) el.classList.remove('hidden');
-    };
-    window.App.modals.closeSettings = function() {
-      const el = document.getElementById('modal-settings');
-      if (el) el.classList.add('hidden');
-    };
-  })();
-</script>
 </body>
 </html>
