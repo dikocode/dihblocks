@@ -63,6 +63,14 @@ html, body {
 .btn:hover:not(:disabled) { filter: brightness(1.12); }
 .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
 
+/* Non-form section labels (replaced from <label> to avoid a11y warnings) */
+.section-label, .settings-group-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
 /* Visually hidden labels for screen readers / accessibility */
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
