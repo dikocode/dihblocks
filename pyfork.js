@@ -53,6 +53,11 @@
     'None': 'null', 'null': 'null',
     'and': '&&', 'or': '||', 'not': '!',
     'self': 'self', 'player': 'player', 'world': 'world',
+    // Expression-level helper functions, usable inside any expression, e.g.
+    // `if distance(self, player) < 100:` or `set a = clamp(x, 0, 10)`.
+    'distance': 'api.distance', 'dist': 'api.distance',
+    'angle_to': 'api.angleTo', 'angleTo': 'api.angleTo',
+    'clamp': 'api.clamp',
   };
 
   function tokensToExpr(tokens) {
@@ -65,14 +70,67 @@
   }
 
   // Join tokens with sensible spacing (used for building JS args).
+  //
+  // Keyword statements in this DSL are written two ways:
+  //   `push self by 10, 20`     (comma-separated)
+  //   `bounce player 700`       (bare space-separated — the common case)
+  // If a top-level comma is present we split on commas as before. Otherwise
+  // we split into separate args on whitespace between top-level *simple*
+  // tokens (numbers, bare identifiers, strings) — but we do NOT split inside
+  // an expression that contains operators/dots/parens, since something like
+  // `self.x + 20` or `self.x` must stay one argument.
   function joinArgs(tokens) {
-    // Split on top-level commas, then convert each group to an expression.
+    const hasTopComma = (() => {
+      let depth = 0;
+      for (const tk of tokens) {
+        if (tk.t === 'op' && (tk.v === '(' || tk.v === '[' || tk.v === '{')) depth++;
+        if (tk.t === 'op' && (tk.v === ')' || tk.v === ']' || tk.v === '}')) depth--;
+        if (tk.t === 'op' && tk.v === ',' && depth === 0) return true;
+      }
+      return false;
+    })();
+
+    if (hasTopComma) {
+      const groups = [[]];
+      let depth = 0;
+      for (const tk of tokens) {
+        if (tk.t === 'op' && (tk.v === '(' || tk.v === '[' || tk.v === '{')) depth++;
+        if (tk.t === 'op' && (tk.v === ')' || tk.v === ']' || tk.v === '}')) depth--;
+        if (tk.t === 'op' && tk.v === ',' && depth === 0) { groups.push([]); continue; }
+        groups[groups.length - 1].push(tk);
+      }
+      return groups.filter(g => g.length).map(tokensToExpr);
+    }
+
+    // No top-level comma: greedily split into whole-expression chunks.
+    // A new arg starts whenever we're at depth 0 and the previous token
+    // ended a "complete" simple value (number/string/id/closing bracket)
+    // and the current token also starts a fresh simple value, with no
+    // binary operator/dot connecting them.
     const groups = [[]];
     let depth = 0;
-    for (const tk of tokens) {
+    const isValueEnd = (tk) => tk && (tk.t === 'num' || tk.t === 'str' ||
+      (tk.t === 'id') || (tk.t === 'op' && (tk.v === ')' || tk.v === ']')));
+    const isValueStart = (tk) => tk && (tk.t === 'num' || tk.t === 'str' ||
+      (tk.t === 'id') || (tk.t === 'op' && (tk.v === '(' || tk.v === '-' || tk.v === '[')));
+    for (let i = 0; i < tokens.length; i++) {
+      const tk = tokens[i];
       if (tk.t === 'op' && (tk.v === '(' || tk.v === '[' || tk.v === '{')) depth++;
       if (tk.t === 'op' && (tk.v === ')' || tk.v === ']' || tk.v === '}')) depth--;
-      if (tk.t === 'op' && tk.v === ',' && depth === 0) { groups.push([]); continue; }
+      const cur = groups[groups.length - 1];
+      if (depth === 0 && cur.length && tk.t !== 'op' &&
+          isValueEnd(cur[cur.length - 1]) && isValueStart(tk) &&
+          !(cur[cur.length - 1].t === 'op' && cur[cur.length - 1].v === '.') &&
+          tk.v !== '.') {
+        groups.push([]);
+      } else if (depth === 0 && cur.length && tk.t === 'op' && tk.v === '-' &&
+          isValueEnd(cur[cur.length - 1]) && tokens[i+1] && (tokens[i+1].t === 'num')) {
+        // Ambiguous: `a -1` (two args) vs `a - 1` (subtraction) both tokenize
+        // the same way once whitespace is gone. Treat a `-` immediately
+        // followed by a number, after a completed value, as a new negative
+        // argument (matches how this DSL's authors write "TARGET -POWER").
+        groups.push([]);
+      }
       groups[groups.length - 1].push(tk);
     }
     return groups.filter(g => g.length).map(tokensToExpr);
@@ -361,11 +419,22 @@
     color(rest)  { return 'api.setColour(self, ' + tokensToExpr(rest) + ');'; },
     texture(rest){ return 'api.setTexture(self, ' + tokensToExpr(rest) + ');'; },
     size(rest)   { return 'api.setSize(self, ' + tokensToExpr(rest) + ');'; },
+    width(rest)  { return 'api.setWidth(self, ' + tokensToExpr(rest) + ');'; },
+    height(rest) { return 'api.setHeight(self, ' + tokensToExpr(rest) + ');'; },
     scale(rest)  { return 'api.setScale(self, ' + tokensToExpr(rest) + ');'; },
     rotate(rest) { return 'api.rotate(self, ' + tokensToExpr(rest) + ');'; },
+    angle(rest)  { return 'api.setRotation(self, ' + tokensToExpr(rest) + ');'; },
     opacity(rest){ return 'api.setOpacity(self, ' + tokensToExpr(rest) + ');'; },
+    fade(rest) {
+      // fade FROM TO DURATION
+      const args = joinArgs(rest);
+      return 'api.fade(self, ' + (args[0]||'1') + ', ' + (args[1]||'0') + ', ' + (args[2]||'0.5') + ');';
+    },
     show()       { return 'api.setVisible(self, true);'; },
     hide()       { return 'api.setVisible(self, false);'; },
+    layer(rest)  { return 'api.setLayer(self, ' + tokensToExpr(rest) + ');'; },
+    label(rest)  { return 'api.setLabel(self, ' + tokensToExpr(rest) + ');'; },
+    tag(rest)    { return 'api.setTag(self, ' + tokensToExpr(rest) + ');'; },
 
     // Physics
     gravity(rest){ return 'api.setGravity(self, ' + tokensToExpr(rest) + ');'; },
@@ -393,6 +462,19 @@
       const target = args[0] || 'self';
       return 'api.jump(' + target + ');';
     },
+    damage(rest) {
+      // damage TARGET AMOUNT   |   damage AMOUNT (defaults target to self)
+      const args = joinArgs(rest);
+      const target = args.length >= 2 ? args[0] : 'self';
+      const amt = args.length >= 2 ? args[1] : (args[0] || '1');
+      return 'api.damage(' + target + ', ' + amt + ');';
+    },
+    heal(rest) {
+      const args = joinArgs(rest);
+      const target = args.length >= 2 ? args[0] : 'self';
+      const amt = args.length >= 2 ? args[1] : (args[0] || '1');
+      return 'api.heal(' + target + ', ' + amt + ');';
+    },
 
     // Movement
     move(rest) {
@@ -417,6 +499,22 @@
       return 'api.follow(self, ' + (args[0]||'player') + ', ' + (args[1]||'80') + ');';
     },
     stop() { return 'api.stop(self);'; },
+    freeze(rest) {
+      const target = rest.length ? tokensToExpr(rest) : 'self';
+      return 'api.freeze(' + target + ');';
+    },
+    unfreeze(rest) {
+      const target = rest.length ? tokensToExpr(rest) : 'self';
+      return 'api.unfreeze(' + target + ');';
+    },
+    lock(rest) {
+      const target = rest.length ? tokensToExpr(rest) : 'self';
+      return 'api.lock(' + target + ');';
+    },
+    unlock(rest) {
+      const target = rest.length ? tokensToExpr(rest) : 'self';
+      return 'api.unlock(' + target + ');';
+    },
 
     // Timing
     wait(rest)  { return 'await api.wait(' + tokensToExpr(rest) + ');'; },

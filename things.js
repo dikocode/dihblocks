@@ -22,6 +22,7 @@
   // Runtime list of Things.
   const things = [];
   let selectedThing = null; // Thing currently open in the editor modal.
+  let selectedIsNew = false; // true if selectedThing was just created and not yet saved.
   const eventBus = {};      // name -> [{ thing, fn }]
 
   // ── Data model ───────────────────────────────────────────
@@ -33,11 +34,16 @@
       y: spec.y || 0,
       vx: 0, vy: 0,
       size: spec.size || 40,
+      width: spec.width || spec.size || 40,
+      height: spec.height || spec.size || 40,
       colour: spec.colour || '#e94560',
       texture: spec.texture || '',
       physics: spec.physics || 'static',
       language: spec.language || 'pyfork',
       script: spec.script || '',
+      tag: spec.tag || '',
+      hp: spec.hp != null ? spec.hp : 100,
+      maxHp: spec.maxHp != null ? spec.maxHp : 100,
       // runtime only:
       _img: null,
       _handlers: null,
@@ -47,12 +53,16 @@
       _visible: true,
       _sayText: '',
       _sayTimer: 0,
+      _labelText: '',
       _intervalAccum: [], // per interval accumulator
       _dead: false,
       _flashUntil: 0,
       _facing: 1,
       _gravity: null,      // override per-thing
       _friction: 0.85,
+      _layer: 0,
+      _frozen: false,
+      _locked: false,
     };
   }
 
@@ -117,11 +127,30 @@
 
       setColour: (t, c) => { t.colour = String(c); },
       setTexture: (t, url) => { t.texture = String(url); loadImageInto(t); },
-      setSize: (t, s) => { t.size = Number(s) || t.size; },
-      setScale: (t, s) => { t.size = (t.size * (Number(s) || 1)); },
+      setSize: (t, s) => { t.size = Number(s) || t.size; t.width = t.size; t.height = t.size; },
+      setWidth: (t, w) => { t.width = Number(w) || t.width; },
+      setHeight: (t, h) => { t.height = Number(h) || t.height; },
+      setScale: (t, s) => {
+        const f = Number(s) || 1;
+        t.size = t.size * f; t.width = t.width * f; t.height = t.height * f;
+      },
       rotate: (t, deg) => { t._rotation = (t._rotation + (Number(deg)||0)) % 360; },
+      setRotation: (t, deg) => { t._rotation = Number(deg) || 0; },
       setOpacity: (t, o) => { t._opacity = Math.max(0, Math.min(1, Number(o))); },
+      fade: (t, from, to, dur) => {
+        const start = performance.now();
+        const a = Number(from), b = Number(to), d = Math.max(1, Number(dur)*1000 || 500);
+        const step = () => {
+          const p = Math.min(1, (performance.now() - start) / d);
+          t._opacity = a + (b - a) * p;
+          if (p < 1 && !t._dead) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      },
       setVisible: (t, v) => { t._visible = !!v; },
+      setLayer: (t, z) => { t._layer = Number(z) || 0; },
+      setLabel: (t, txt) => { t._labelText = String(txt == null ? '' : txt); },
+      setTag: (t, tag) => { t.tag = String(tag == null ? '' : tag); },
 
       setGravity: (t, g) => { t._gravity = Number(g); },
       setFriction: (t, f) => { t._friction = Math.max(0, Math.min(1, Number(f))); },
@@ -157,6 +186,34 @@
         t.vy = (dy/d) * s;
       },
       stop: (t) => { if (t) { t.vx = 0; t.vy = 0; } },
+      freeze: (t) => { if (t) { t._frozen = true; t.vx = 0; t.vy = 0; } },
+      unfreeze: (t) => { if (t) t._frozen = false; },
+      lock: (t) => { if (t) t._locked = true; },
+      unlock: (t) => { if (t) t._locked = false; },
+
+      // Health / damage
+      damage: (t, amt) => {
+        if (!t) return;
+        t.hp = Math.max(0, (t.hp == null ? 100 : t.hp) - (Number(amt) || 0));
+        if (t.hp <= 0) fireEvent('death', { thing: t });
+      },
+      heal: (t, amt) => {
+        if (!t) return;
+        const max = t.maxHp == null ? 100 : t.maxHp;
+        t.hp = Math.min(max, (t.hp == null ? 100 : t.hp) + (Number(amt) || 0));
+      },
+      setHp: (t, v) => { if (t) t.hp = Number(v) || 0; },
+
+      // Geometry helpers
+      distance: (a, b) => {
+        if (!a || !b) return 0;
+        return Math.hypot((a.x||0) - (b.x||0), (a.y||0) - (b.y||0));
+      },
+      angleTo: (a, b) => {
+        if (!a || !b) return 0;
+        return Math.atan2((b.y||0) - (a.y||0), (b.x||0) - (a.x||0)) * 180 / Math.PI;
+      },
+      clamp: (v, lo, hi) => Math.max(Number(lo), Math.min(Number(hi), Number(v))),
 
       wait: (sec) => new Promise(r => setTimeout(r, Math.max(0, Number(sec)*1000))),
 
@@ -446,9 +503,29 @@
   }
 
   // ── Editor modal ─────────────────────────────────────────
+  // Find an existing Thing whose bounding box contains the world point (wx, wy).
+  function findThingAtPoint(wx, wy) {
+    // Iterate in reverse so the most-recently-added (topmost) Thing wins.
+    for (let i = things.length - 1; i >= 0; i--) {
+      const t = things[i];
+      const half = t.size / 2;
+      if (wx >= t.x - half && wx <= t.x + half &&
+          wy >= t.y - half && wy <= t.y + half) {
+        return t;
+      }
+    }
+    return null;
+  }
+
   function openEditorAt(wx, wy) {
-    selectedThing = makeThing({ x: wx, y: wy, name: 'Thing ' + (things.length + 1) });
-    things.push(selectedThing);
+    // Reuse an existing Thing at this spot instead of always creating a new
+    // one — otherwise every re-edit silently spawned a duplicate blank Thing
+    // on top of the original, and the script you edited/saved landed on the
+    // throwaway duplicate rather than the Thing actually on the map.
+    const existing = findThingAtPoint(wx, wy);
+    selectedThing = existing || makeThing({ x: wx, y: wy, name: 'Thing ' + (things.length + 1) });
+    selectedIsNew = !existing;
+    if (!existing) things.push(selectedThing);
     populateEditor(selectedThing);
     document.getElementById('modal-thing').classList.remove('hidden');
   }
@@ -481,8 +558,16 @@
   }
 
   function closeEditor() {
+    // Cancelling a brand-new (never-saved) Thing should discard it, not
+    // leave an invisible/blank Thing sitting on the map.
+    if (selectedIsNew && selectedThing) {
+      const i = things.indexOf(selectedThing);
+      if (i !== -1) things.splice(i, 1);
+      detachThingFromBus(selectedThing);
+    }
     document.getElementById('modal-thing').classList.add('hidden');
     selectedThing = null;
+    selectedIsNew = false;
   }
 
   function saveCurrent() {
@@ -501,6 +586,7 @@
     loadImageInto(selectedThing);
     const res = compileThing(selectedThing);
     if (!res.ok) { showError('Script error: ' + res.error); return; }
+    selectedIsNew = false; // saved successfully, so it's no longer "new/unsaved"
     closeEditor();
     if (global.App && App.notify) App.notify('✨ Thing saved');
   }
@@ -510,6 +596,7 @@
     const i = things.indexOf(selectedThing);
     if (i !== -1) things.splice(i, 1);
     detachThingFromBus(selectedThing);
+    selectedIsNew = false; // already removed above; closeEditor shouldn't remove it again
     closeEditor();
   }
 
@@ -557,8 +644,10 @@
   function serialize() {
     return things.map(t => ({
       id: t.id, name: t.name, x: t.x, y: t.y, size: t.size,
+      width: t.width, height: t.height,
       colour: t.colour, texture: t.texture, physics: t.physics,
       language: t.language, script: t.script,
+      tag: t.tag, hp: t.hp, maxHp: t.maxHp,
     }));
   }
 
