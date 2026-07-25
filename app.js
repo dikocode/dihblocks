@@ -103,7 +103,7 @@ function buildDefaultMap() {
   }
   // Spawn
   tiles.push({ x: 3, y: 25, type: 'spawn' });
-  return { tiles, width: W * TILE_SIZE, height: H * TILE_SIZE, name: 'Parkour Base' };
+  return { tiles, width: Number.POSITIVE_INFINITY, height: Number.POSITIVE_INFINITY, name: 'Parkour Base' };
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -630,9 +630,9 @@ function resolvePlayerPhysics(p, dt) {
   checkHazards(p);
 
   // World bounds
-  if (p.y > state.map.height + 200) respawn(p);
+  if (p.y > (Number.isFinite(state.map.height) ? state.map.height + 200 : 5000)) respawn(p);
   if (p.x < -TILE_SIZE) p.x = -TILE_SIZE;
-  if (p.x + p.w > state.map.width + TILE_SIZE) p.x = state.map.width + TILE_SIZE - p.w;
+  if (Number.isFinite(state.map.width) && p.x + p.w > state.map.width + TILE_SIZE) p.x = state.map.width + TILE_SIZE - p.w;
 }
 
 function resolveAxisX(p) {
@@ -728,11 +728,19 @@ function getEditorViewportSize() {
 }
 
 function clampCamera() {
+  // Infinite world: only prevent camera from going negative on Y for sky;
+  // allow full free-scroll on X. Editor may freely pan anywhere.
   const { width, height } = getEditorViewportSize();
-  const maxX = Math.max(0, state.map.width - width);
-  const maxY = Math.max(0, state.map.height - height);
-  state.camera.x = Math.max(0, Math.min(state.camera.x, maxX));
-  state.camera.y = Math.max(0, Math.min(state.camera.y, maxY));
+  const finiteW = Number.isFinite(state.map.width);
+  const finiteH = Number.isFinite(state.map.height);
+  if (finiteW) {
+    const maxX = Math.max(0, state.map.width - width);
+    state.camera.x = Math.max(0, Math.min(state.camera.x, maxX));
+  }
+  if (finiteH) {
+    const maxY = Math.max(0, state.map.height - height);
+    state.camera.y = Math.max(0, Math.min(state.camera.y, maxY));
+  }
 }
 
 function panEditorByScreenDelta(deltaX, deltaY) {
@@ -768,9 +776,16 @@ function resetEditorView() {
 }
 
 function centerEditorView() {
+  // Infinite world: center on the local player when available, otherwise origin.
   const { width, height } = getEditorViewportSize();
-  state.camera.x = (state.map.width - width) / 2;
-  state.camera.y = (state.map.height - height) / 2;
+  const p = state.localPlayer;
+  if (p) {
+    state.camera.x = p.x + p.w/2 - width/2;
+    state.camera.y = p.y + p.h/2 - height/2;
+  } else {
+    state.camera.x = 0;
+    state.camera.y = 0;
+  }
   clampCamera();
 }
 
@@ -832,6 +847,7 @@ function gameLoop(ts) {
 
     // Physics
     resolvePlayerPhysics(p, deltaTime);
+    if (window.Things) window.Things.update(deltaTime, p);
 
     // Chat timer
     if (p.chatTimer > 0) p.chatTimer -= deltaTime * 1000;
@@ -938,6 +954,9 @@ function renderFrame(localP) {
   for (const rp of Object.values(state.players)) {
     drawCharacter(ctx, rp, rp.x, rp.y, 1/60, false);
   }
+
+  // ── Things (scripted textured objects) ──
+  if (window.Things) window.Things.render(ctx);
 
   // ── Local player ──
   drawCharacter(ctx, localP, localP.x, localP.y, 1/60, true);
@@ -1092,9 +1111,24 @@ function editorCanvasClick(e, isRight) {
   const ty   = Math.floor(my / TILE_SIZE);
   const key  = `${tx},${ty}`;
 
-  if (isRight || state.editorTile === 'erase') {
+  // Right-click always deletes: tile first, else a Thing under the cursor.
+  if (isRight) {
+    const removed = state.map.tiles.length;
     state.map.tiles = state.map.tiles.filter(t => !(t.x === tx && t.y === ty));
     delete state.tileMap[key];
+    if (state.map.tiles.length === removed && window.Things) {
+      window.Things.deleteAt(mx, my);
+    }
+    return;
+  }
+  if (state.editorTile === 'thing') {
+    if (window.Things) window.Things.openEditorAt(tx * TILE_SIZE, ty * TILE_SIZE);
+    return;
+  }
+  if (state.editorTile === 'erase') {
+    state.map.tiles = state.map.tiles.filter(t => !(t.x === tx && t.y === ty));
+    delete state.tileMap[key];
+    if (window.Things) window.Things.deleteAt(mx, my);
   } else {
     state.map.tiles = state.map.tiles.filter(t => !(t.x === tx && t.y === ty));
     const newTile = { x: tx, y: ty, type: state.editorTile };
@@ -1670,8 +1704,11 @@ const App = {
 
       const mapData = {
         tiles:  state.map.tiles,
-        width:  state.map.width,
-        height: state.map.height,
+        width:  Number.isFinite(state.map.width)  ? state.map.width  : null,
+        height: Number.isFinite(state.map.height) ? state.map.height : null,
+        things: (window.Things && typeof window.Things.serialize === 'function')
+          ? window.Things.serialize()
+          : [],
       };
 
       // UPDATE the existing record if user is the original creator; otherwise INSERT new
@@ -1746,9 +1783,14 @@ const App = {
 
     applyMapData(mapData) {
       state.map.tiles  = mapData.tiles || [];
-      state.map.width  = mapData.width  || 2400;
-      state.map.height = mapData.height || 1200;
+      // Infinite world by default; only respect finite bounds if explicitly given.
+      state.map.width  = (mapData.width  && Number.isFinite(mapData.width))  ? mapData.width  : Number.POSITIVE_INFINITY;
+      state.map.height = (mapData.height && Number.isFinite(mapData.height)) ? mapData.height : Number.POSITIVE_INFINITY;
       rebuildTileMap();
+      // Load things (scripted textured objects) if present.
+      if (window.Things && typeof window.Things.loadAll === 'function') {
+        window.Things.loadAll(mapData.things || []);
+      }
       if (state.localPlayer) respawn(state.localPlayer);
     },
   },
