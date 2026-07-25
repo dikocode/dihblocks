@@ -52,7 +52,7 @@ const GRAVITY      = 2200; // px/s² — strong enough for a quick landing
 const JUMP_FORCE   = -650; // px/s — about 96 px / 2.4 tiles of jump height
 const MOVE_SPEED   = 4.5 * BASE_FRAME_RATE;
 const MAX_FALL_SPD = 950;  // px/s — prevents an excessively slow terminal fall
-const WALK_CYCLE_SPEED = 0.006; // animation radians per millisecond
+const WALK_CYCLE_SPEED = 0.003; // animation radians per millisecond
 const CAMERA_LERP_RATE = 8;
 const REMOTE_LERP_RATE = 12;
 const SYNC_RATE_MS = 50;   // 20Hz position broadcast
@@ -347,10 +347,10 @@ function drawCharacter(ctx, player, screenX, screenY, dt, isLocal) {
   // ── Arms (drawn on top of torso) ──
   const armAnchorY = cy + HEAD_R*2 + TORSO_H*0.2 + bobY;
   if (player.isDancing) {
-    walkPhase = Math.sin(t * 0.006) * 1.0;
+    walkPhase = Math.sin(t * 0.003) * 1.0;
     // arms up/out in dance
-    drawArm(ctx, cx, armAnchorY, f, -1, Math.PI/3 + Math.sin(t*0.007)*0.8, a.armColor, ARM_W, ARM_H);
-    drawArm(ctx, cx, armAnchorY, f,  1, Math.PI/3 + Math.cos(t*0.007)*0.8, a.armColor, ARM_W, ARM_H);
+    drawArm(ctx, cx, armAnchorY, f, -1, Math.PI/3 + Math.sin(t*0.0035)*0.8, a.armColor, ARM_W, ARM_H);
+    drawArm(ctx, cx, armAnchorY, f,  1, Math.PI/3 + Math.cos(t*0.0035)*0.8, a.armColor, ARM_W, ARM_H);
   } else if (player.animState === 'jump') {
     // Airborne pose: arms up/out and legs tucked so jumping is visibly
     // different from both the idle and walking poses.
@@ -370,8 +370,8 @@ function drawCharacter(ctx, player, screenX, screenY, dt, isLocal) {
     drawLeg(ctx, cx, legY, -1, -0.55 - jumpLegSway, a.legColor, LEG_W, LEG_H);
     drawLeg(ctx, cx, legY,  1,  0.55 + jumpLegSway, a.legColor, LEG_W, LEG_H);
   } else if (player.isDancing) {
-    drawLeg(ctx, cx, legY, -1, Math.sin(t*0.009) * 0.8, a.legColor, LEG_W, LEG_H);
-    drawLeg(ctx, cx, legY,  1, Math.sin(t*0.009 + Math.PI) * 0.8, a.legColor, LEG_W, LEG_H);
+    drawLeg(ctx, cx, legY, -1, Math.sin(t*0.0045) * 0.8, a.legColor, LEG_W, LEG_H);
+    drawLeg(ctx, cx, legY,  1, Math.sin(t*0.0045 + Math.PI) * 0.8, a.legColor, LEG_W, LEG_H);
   } else {
     drawLeg(ctx, cx, legY, -1,  walkPhase, a.legColor, LEG_W, LEG_H);
     drawLeg(ctx, cx, legY,  1, -walkPhase, a.legColor, LEG_W, LEG_H);

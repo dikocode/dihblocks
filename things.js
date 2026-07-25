@@ -470,7 +470,7 @@
         ctx.strokeStyle = 'rgba(0,0,0,0.35)';
         ctx.strokeRect(t.x + 0.5, t.y + 0.5, t.size - 1, t.size - 1);
       }
-      // Speech.
+      // Speech bubble.
       if (t._sayTimer > 0 && t._sayText) {
         ctx.font = '12px system-ui, sans-serif';
         const w = ctx.measureText(t._sayText).width + 12;
@@ -479,6 +479,20 @@
         ctx.fillStyle = '#fff';
         ctx.textAlign = 'center';
         ctx.fillText(t._sayText, t.x + t.size/2, t.y - 8);
+      }
+      // Label (persistent text shown below the thing).
+      if (t._labelText) {
+        ctx.font = 'bold 11px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        const lw = ctx.measureText(t._labelText).width + 10;
+        const lx = t.x + t.size / 2;
+        const ly = t.y + t.size + 4;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath();
+        ctx.roundRect(lx - lw / 2, ly, lw, 16, 4);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(t._labelText, lx, ly + 11);
       }
       ctx.restore();
     }
@@ -550,6 +564,50 @@
     }
     $('thing-error').classList.add('hidden');
     $('thing-compiled').style.display = 'none';
+
+    // ── Auto-indent for the script textarea ──
+    const scriptEl = $('thing-script');
+    // Remove any previously attached listener to avoid duplicates on re-open.
+    if (scriptEl._autoIndentHandler) {
+      scriptEl.removeEventListener('keydown', scriptEl._autoIndentHandler);
+    }
+    scriptEl._autoIndentHandler = function handleScriptKey(e) {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = this.selectionStart;
+        const end   = this.selectionEnd;
+        const indent = '    '; // 4 spaces
+        if (start === end) {
+          // No selection — insert spaces at cursor.
+          this.value = this.value.slice(0, start) + indent + this.value.slice(end);
+          this.selectionStart = this.selectionEnd = start + indent.length;
+        } else {
+          // Multi-line selection — indent every selected line.
+          const before  = this.value.slice(0, start);
+          const sel     = this.value.slice(start, end);
+          const after   = this.value.slice(end);
+          const indented = sel.replace(/^/gm, indent);
+          this.value = before + indented + after;
+          this.selectionStart = start;
+          this.selectionEnd   = start + indented.length;
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const start = this.selectionStart;
+        const text  = this.value;
+        // Find the start of the current line.
+        const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+        const currentLine = text.slice(lineStart, start);
+        // Capture leading whitespace.
+        const leadingWS = currentLine.match(/^(\s*)/)[1];
+        // If the line ends with ':', add one extra level of indent.
+        const extraIndent = currentLine.trimEnd().endsWith(':') ? '    ' : '';
+        const insertion = '\n' + leadingWS + extraIndent;
+        this.value = text.slice(0, start) + insertion + text.slice(this.selectionEnd);
+        this.selectionStart = this.selectionEnd = start + insertion.length;
+      }
+    };
+    scriptEl.addEventListener('keydown', scriptEl._autoIndentHandler);
 
     $('thing-tex-file').onchange = async (e) => {
       const f = e.target.files && e.target.files[0];
