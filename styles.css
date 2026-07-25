@@ -73,6 +73,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .btn-primary:hover  { background: #c73652; }
 .btn-secondary{ background: var(--surface); color: var(--text); }
 .btn-secondary:hover { background: #145082; }
+.btn-accent   { background: var(--accent);  color: #fff; border-color: var(--accent); }
+.btn-accent:hover { filter: brightness(1.15); }
 .btn-success  { background: var(--success); color: #fff; }
 .btn-danger   { background: var(--danger);  color: #fff; }
 .btn-ghost    { background: transparent; color: var(--muted); border: 1px solid var(--border); }

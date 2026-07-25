@@ -146,6 +146,7 @@ const state = {
   isPanning:   false,
   panLastX:    0,
   panLastY:    0,
+  editorTouchMode: 'paint', // 'paint' | 'pan'
   editorTouch: {
     active: false,
     distance: 0,
@@ -326,27 +327,40 @@ function drawCharacter(ctx, player, screenX, screenY, dt, isLocal) {
   // ── Compute limb angles based on anim state ──
   let walkPhase = 0;
   if (player.animState === 'walk') walkPhase = Math.sin(t * WALK_CYCLE_SPEED) * 0.6;
+
+  // ── Torso (drawn first so limbs render on top) ──
+  const torsoY = cy + HEAD_R*2 + bobY;
+  ctx.fillStyle = a.torsoColor;
+  const torsoX = cx - W/2 + 4;
+  const torsoW = W - 8;
+  ctx.beginPath();
+  ctx.roundRect(torsoX, torsoY, torsoW, TORSO_H, 3);
+  ctx.fill();
+  // Shirt image overlay
+  if (player._shirtImg) {
+    ctx.drawImage(player._shirtImg, torsoX, torsoY, torsoW, TORSO_H);
+  }
+
+  // ── Arms (drawn on top of torso) ──
+  const armAnchorY = cy + HEAD_R*2 + TORSO_H*0.2 + bobY;
   if (player.isDancing) {
     walkPhase = Math.sin(t * 0.006) * 1.0;
-    const twist = Math.sin(t * 0.005) * 0.4;
     // arms up/out in dance
-    drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY,  f, -1, Math.PI/3 + Math.sin(t*0.007)*0.8, a.armColor, ARM_W, ARM_H);
-    drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY,  f,  1, Math.PI/3 + Math.cos(t*0.007)*0.8, a.armColor, ARM_W, ARM_H);
+    drawArm(ctx, cx, armAnchorY, f, -1, Math.PI/3 + Math.sin(t*0.007)*0.8, a.armColor, ARM_W, ARM_H);
+    drawArm(ctx, cx, armAnchorY, f,  1, Math.PI/3 + Math.cos(t*0.007)*0.8, a.armColor, ARM_W, ARM_H);
   } else if (player.animState === 'jump') {
     // Airborne pose: arms up/out and legs tucked so jumping is visibly
     // different from both the idle and walking poses.
     const jumpSway = Math.sin(t * 0.004) * 0.08;
-    drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY, f, -1,
-      -0.75 + jumpSway, a.armColor, ARM_W, ARM_H);
-    drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY, f,  1,
-       0.75 - jumpSway, a.armColor, ARM_W, ARM_H);
+    drawArm(ctx, cx, armAnchorY, f, -1, -0.75 + jumpSway, a.armColor, ARM_W, ARM_H);
+    drawArm(ctx, cx, armAnchorY, f,  1,  0.75 - jumpSway, a.armColor, ARM_W, ARM_H);
   } else {
     // Normal arms
-    drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY,  f, -1, -walkPhase * 0.7, a.armColor, ARM_W, ARM_H);
-    drawArm(ctx, cx, cy + HEAD_R*2 + TORSO_H*0.2 + bobY,  f,  1,  walkPhase * 0.7, a.armColor, ARM_W, ARM_H);
+    drawArm(ctx, cx, armAnchorY, f, -1, -walkPhase * 0.7, a.armColor, ARM_W, ARM_H);
+    drawArm(ctx, cx, armAnchorY, f,  1,  walkPhase * 0.7, a.armColor, ARM_W, ARM_H);
   }
 
-  // ── Legs ──
+  // ── Legs (drawn on top of torso bottom) ──
   const legY = cy + HEAD_R*2 + TORSO_H + bobY;
   if (player.animState === 'jump') {
     const jumpLegSway = Math.sin(t * 0.004) * 0.08;
@@ -358,19 +372,6 @@ function drawCharacter(ctx, player, screenX, screenY, dt, isLocal) {
   } else {
     drawLeg(ctx, cx, legY, -1,  walkPhase, a.legColor, LEG_W, LEG_H);
     drawLeg(ctx, cx, legY,  1, -walkPhase, a.legColor, LEG_W, LEG_H);
-  }
-
-  // ── Torso ──
-  const torsoY = cy + HEAD_R*2 + bobY;
-  ctx.fillStyle = a.torsoColor;
-  const torsoX = cx - W/2 + 4;
-  const torsoW = W - 8;
-  ctx.beginPath();
-  ctx.roundRect(torsoX, torsoY, torsoW, TORSO_H, 3);
-  ctx.fill();
-  // Shirt image overlay
-  if (player._shirtImg) {
-    ctx.drawImage(player._shirtImg, torsoX, torsoY, torsoW, TORSO_H);
   }
 
   // ── Head ──
@@ -1401,6 +1402,18 @@ const App = {
       rebuildTileMap();
       App.notify('🗑 Map cleared');
     },
+    toggleTouchMode() {
+      state.editorTouchMode = state.editorTouchMode === 'paint' ? 'pan' : 'paint';
+      const btn = document.getElementById('editor-touch-mode-btn');
+      if (btn) {
+        const isPaint = state.editorTouchMode === 'paint';
+        btn.textContent = isPaint ? '🖌 Paint' : '✋ Pan';
+        btn.title = isPaint ? 'Drag to paint tiles (tap to switch to pan)' : 'Drag to pan map (tap to switch to paint)';
+        btn.classList.toggle('btn-accent', isPaint);
+        btn.classList.toggle('btn-ghost', !isPaint);
+      }
+      App.notify(state.editorTouchMode === 'paint' ? '🖌 Paint mode: drag to place tiles' : '✋ Pan mode: drag to scroll');
+    },
   },
 
   /* ── Mobile ───────────────────────────────────────────── */
@@ -1739,8 +1752,13 @@ function initEditorListeners() {
       state.editorTouch.lastX = t.clientX;
       state.editorTouch.lastY = t.clientY;
       state.editorTouch.moved = false;
+      // In paint mode, place a block immediately on touch-down
+      if (state.editorTouchMode === 'paint') {
+        editorCanvasClick(t, false);
+      }
       return;
     }
+    // Two-finger gesture — always pan+zoom regardless of mode
     const first = e.touches[0];
     const second = e.touches[1];
     state.editorTouch.active = true;
@@ -1758,12 +1776,19 @@ function initEditorListeners() {
       const dx = t.clientX - state.editorTouch.lastX;
       const dy = t.clientY - state.editorTouch.lastY;
       if (Math.hypot(dx, dy) > 0) state.editorTouch.moved = true;
-      panEditorByScreenDelta(dx, dy);
+      if (state.editorTouchMode === 'paint') {
+        // Drag to paint: place block at each touch position
+        editorCanvasClick(t, false);
+      } else {
+        // Pan mode: drag to scroll the camera
+        panEditorByScreenDelta(dx, dy);
+      }
       state.editorTouch.lastX = t.clientX;
       state.editorTouch.lastY = t.clientY;
       return;
     }
     if (e.touches.length < 2) return;
+    // Two-finger pinch-zoom + pan (works in both modes)
     state.editorTouch.singleFinger = false;
     const first = e.touches[0];
     const second = e.touches[1];
@@ -1791,7 +1816,10 @@ function initEditorListeners() {
     state.editorTouch.moved = false;
   };
   canvas.addEventListener('touchend', e => {
-    if (state.editorTouch.singleFinger && !state.editorTouch.moved && e.changedTouches[0]) {
+    // In pan mode: a tap (no movement) still places a block
+    if (state.editorTouchMode === 'pan' &&
+        state.editorTouch.singleFinger && !state.editorTouch.moved &&
+        e.changedTouches[0]) {
       editorCanvasClick(e.changedTouches[0], false);
     }
     resetTouchGesture();

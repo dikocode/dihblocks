@@ -138,7 +138,10 @@
 
       <!-- Compact mobile editor controls -->
       <div id="editor-mobile-tools" class="hidden" aria-label="Mobile editor controls">
-        <span class="editor-mobile-hint">Drag to pan · tap to place</span>
+        <button class="btn btn-accent btn-sm" type="button"
+                id="editor-touch-mode-btn"
+                title="Drag to paint tiles (tap to switch to pan)"
+                onclick="App.editor.toggleTouchMode()">🖌 Paint</button>
         <button class="btn btn-ghost btn-icon" type="button" onclick="App.editor.zoomOut()" aria-label="Zoom out">−</button>
         <button class="btn btn-ghost btn-icon" type="button" onclick="App.editor.zoomIn()" aria-label="Zoom in">＋</button>
         <button class="btn btn-secondary btn-sm" type="button" onclick="App.editor.centerView()">Center</button>
