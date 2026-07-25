@@ -309,7 +309,7 @@
 <div id="modal-savemap" class="modal-overlay hidden">
   <div class="modal" style="width:min(380px,100%)">
     <div class="modal-header">
-      <h3>💾 Publish Map</h3>
+      <h3 id="save-map-heading">💾 Publish New Map</h3>
       <button class="modal-close" onclick="App.modals.close('savemap')">✕</button>
     </div>
     <div class="modal-body">
@@ -324,7 +324,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost"   onclick="App.modals.close('savemap')">Cancel</button>
-      <button class="btn btn-success" onclick="App.maps.saveCurrentMap()">Publish</button>
+      <button class="btn btn-success" id="save-map-btn" onclick="App.maps.saveCurrentMap()">Publish</button>
     </div>
   </div>
 </div>

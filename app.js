@@ -146,6 +146,9 @@ const state = {
   isPanning:   false,
   panLastX:    0,
   panLastY:    0,
+  currentMapId:      null,  // Supabase row id of the loaded map (null = new/default)
+  currentMapTitle:   null,  // title of the loaded map
+  currentMapCreator: null,  // username who published it
   editorTouchMode: 'paint', // 'paint' | 'pan'
   editorTouch: {
     active: false,
@@ -1445,9 +1448,14 @@ const App = {
         container.innerHTML = '<div class="game-empty">Could not load published games.<br><br><button class="btn btn-secondary btn-sm" onclick="App.hub.refresh()">Try again</button></div>';
         return;
       }
-      const savedCards = data.map(m =>
-        '<article class="game-card"><div><div class="game-card-top"><span class="eyebrow">COMMUNITY GAME</span><span class="game-card-icon">◈</span></div><h2>' + escapeHtml(m.title) + '</h2><p>Published by ' + escapeHtml(m.creator) + '.</p><div class="game-card-meta">' + (m.created_at ? new Date(m.created_at).toLocaleDateString() : 'Recently published') + '</div></div><div class="game-card-actions"><button class="btn btn-primary btn-sm" onclick="App.hub.playSaved(\'' + escapeHtml(m.id) + '\')">Play game</button><button class="btn btn-ghost btn-sm" onclick="App.hub.editSaved(\'' + escapeHtml(m.id) + '\')">Edit</button></div></article>'
-      ).join('');
+      const me = state.user?.username;
+      const savedCards = data.map(m => {
+        const isOwner = m.creator === me;
+        const editBtn = isOwner
+          ? `<button class="btn btn-ghost btn-sm" onclick="App.hub.editSaved('${escapeHtml(m.id)}')">✏️ Edit</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="App.hub.cloneSaved('${escapeHtml(m.id)}')">📋 Clone</button>`;
+        return '<article class="game-card"><div><div class="game-card-top"><span class="eyebrow">' + (isOwner ? 'YOUR GAME' : 'COMMUNITY GAME') + '</span><span class="game-card-icon">◈</span></div><h2>' + escapeHtml(m.title) + '</h2><p>By ' + escapeHtml(m.creator) + '.</p><div class="game-card-meta">' + (m.created_at ? new Date(m.created_at).toLocaleDateString() : 'Recently published') + '</div></div><div class="game-card-actions"><button class="btn btn-primary btn-sm" onclick="App.hub.playSaved(\'' + escapeHtml(m.id) + '\')">▶ Play</button>' + editBtn + '</div></article>';
+      }).join('');
       container.innerHTML = '<article class="game-card featured"><div><div class="game-card-top"><span class="eyebrow">FEATURED</span><span class="game-card-icon">✦</span></div><h2>Parkour Base</h2><p>Jump across platforms, avoid hazards, and explore the original Dihblocks world.</p><div class="game-card-meta">Built-in starter game</div></div><div class="game-card-actions"><button class="btn btn-primary btn-sm" onclick="App.hub.playDefault()">Play game</button></div></article>' + (savedCards || '<div class="game-empty">No community games yet. Create the first one.</div>');
     },
     playDefault() {
@@ -1457,16 +1465,43 @@ const App = {
     },
     async playSaved(id) { await App.maps.loadMap(id); },
     async editSaved(id) {
-      await App.maps.loadMap(id, true);
+      // Fetch the record first to verify ownership before entering editor
+      const { data, error } = await _supabase.from('games').select('*').eq('id', id).single();
+      if (error || !data) { App.notify('Failed to load map.'); return; }
+      if (data.creator !== state.user?.username) {
+        App.notify('⛔ Only ' + data.creator + ' can edit this level. Use Clone to make your own copy.');
+        return;
+      }
+      App.maps.applyMapData(data.data);
+      state.currentMapId      = data.id;
+      state.currentMapTitle   = data.title;
+      state.currentMapCreator = data.creator;
       App.hub.hide();
       if (!state.editorMode) App.editor.toggle();
-      App.notify('🛠 Editing selected game');
+      App.notify('🛠 Editing: ' + data.title);
+    },
+    async cloneSaved(id) {
+      // Load map data locally without recording ownership — save will publish as a new map
+      const { data, error } = await _supabase.from('games').select('*').eq('id', id).single();
+      if (error || !data) { App.notify('Failed to load map.'); return; }
+      App.maps.applyMapData(data.data);
+      // Clear ownership so saving creates a new record under the current user
+      state.currentMapId      = null;
+      state.currentMapTitle   = 'Copy of ' + data.title;
+      state.currentMapCreator = null;
+      App.hub.hide();
+      if (!state.editorMode) App.editor.toggle();
+      App.notify('📋 Cloned "' + data.title + '" — publish it to save your version');
     },
     createGame() {
       App.maps.applyMapData(buildDefaultMap());
+      // Clear map ownership — this is a brand-new level
+      state.currentMapId      = null;
+      state.currentMapTitle   = null;
+      state.currentMapCreator = null;
       App.hub.hide();
       if (!state.editorMode) App.editor.toggle();
-      App.notify('🛠 New game started — build something great');
+      App.notify('🛠 New level started — build something great');
     },
   },
 
@@ -1579,24 +1614,37 @@ const App = {
         container.innerHTML = '<div class="empty-state">no games rn 😴<br><br>Create one in Editor mode!</div>';
         return;
       }
-      container.innerHTML = `<div class="map-list">${data.map(m => `
-        <div class="map-card">
+      const me2 = state.user?.username;
+      container.innerHTML = `<div class="map-list">${data.map(m => {
+        const isOwner2 = m.creator === me2;
+        const editBtn2 = isOwner2
+          ? `<button class="btn btn-ghost btn-sm" onclick="App.hub.editSaved('${m.id}')">✏️ Edit</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="App.hub.cloneSaved('${m.id}')">📋 Clone</button>`;
+        return `<div class="map-card">
           <div class="map-card-info">
             <h4>${escapeHtml(m.title)}</h4>
             <div class="meta">by ${escapeHtml(m.creator)} • ${new Date(m.created_at).toLocaleDateString()}</div>
           </div>
           <div class="map-actions">
             <button class="btn btn-primary btn-sm" onclick="App.maps.loadMap('${m.id}')">▶ Load</button>
+            ${editBtn2}
           </div>
-        </div>`).join('')}</div>`;
+        </div>`;
+      }).join('')}</div>`;
     },
 
     openSaveMap() {
       if (!state.editorMode) { App.notify('Enable editor mode first!'); return; }
-      document.getElementById('map-title').value = '';
+      document.getElementById('map-title').value = state.currentMapTitle || '';
       document.getElementById('save-map-error').classList.add('hidden');
       document.getElementById('save-map-success').classList.add('hidden');
+      App.modals._refreshSaveMapUI();
       App.modals.open('savemap');
+    },
+    _refreshSaveMapUI() {
+      const isOwner = state.currentMapId && state.currentMapCreator === state.user?.username;
+      document.getElementById('save-map-heading').textContent = isOwner ? '💾 Update Map' : '💾 Publish New Map';
+      document.getElementById('save-map-btn').textContent     = isOwner ? 'Update' : 'Publish';
     },
   },
 
@@ -1626,9 +1674,28 @@ const App = {
         height: state.map.height,
       };
 
-      const { error } = await _supabase
-        .from('games')
-        .insert({ title, creator: state.user.username, data: mapData });
+      // UPDATE the existing record if user is the original creator; otherwise INSERT new
+      const isOwner = state.currentMapId && state.currentMapCreator === state.user.username;
+      let error;
+      if (isOwner) {
+        ({ error } = await _supabase
+          .from('games')
+          .update({ title, data: mapData })
+          .eq('id', state.currentMapId));
+      } else {
+        let inserted;
+        ({ data: inserted, error } = await _supabase
+          .from('games')
+          .insert({ title, creator: state.user.username, data: mapData })
+          .select()
+          .single());
+        if (!error && inserted) {
+          // Track the newly created map so future saves update it
+          state.currentMapId      = inserted.id;
+          state.currentMapTitle   = inserted.title;
+          state.currentMapCreator = state.user.username;
+        }
+      }
 
       if (error) {
         errEl.textContent = 'Save failed: ' + (error.message || 'unknown error');
@@ -1636,17 +1703,15 @@ const App = {
         return;
       }
 
-      sucEl.textContent = '✓ Map published successfully!';
-      sucEl.classList.remove('hidden');
-      App.notify('✅ Map published: ' + title);
+      // Keep title in sync
+      state.currentMapTitle = title;
 
-      // Broadcast map change to all players
-      if (state.channel) {
-        state.channel.send({
-          type: 'broadcast', event: 'map_change',
-          payload: { id: state.sessionId, username: state.user.username, mapData }
-        });
-      }
+      sucEl.textContent = isOwner ? '✓ Map updated!' : '✓ Map published!';
+      sucEl.classList.remove('hidden');
+      App.notify(isOwner ? '✅ Map updated: ' + title : '✅ Map published: ' + title);
+
+      // Update the modal heading for future opens
+      App.modals._refreshSaveMapUI();
 
       setTimeout(() => App.modals.close('savemap'), 1800);
     },
@@ -1661,10 +1726,16 @@ const App = {
       if (error || !data) { App.notify('Failed to load map.'); return; }
 
       App.maps.applyMapData(data.data);
+
+      // Track which published map is loaded so we can UPDATE instead of INSERT
+      state.currentMapId      = data.id;
+      state.currentMapTitle   = data.title;
+      state.currentMapCreator = data.creator;
+
       if (!keepEditor) App.hub.hide();
       App.notify('🗺 Loaded: ' + data.title);
 
-      // Broadcast
+      // Broadcast map change to other players
       if (state.channel) {
         state.channel.send({
           type: 'broadcast', event: 'map_change',
