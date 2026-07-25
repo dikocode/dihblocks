@@ -346,6 +346,56 @@ label { font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; display:blo
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Script Console (creator-only debug panel) ──────────── */
+#script-console {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  width: min(420px, calc(100% - 16px));
+  max-height: 260px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 14, 26, 0.94);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  z-index: 250;
+  overflow: hidden;
+}
+#script-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent2);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+#script-console-actions { display: flex; gap: 4px; }
+#script-console-actions .btn-icon { width: 26px; height: 26px; font-size: 0.85rem; }
+#script-console-log {
+  overflow-y: auto;
+  padding: 6px 10px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+#script-console-log .console-line {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#script-console-log .console-line .console-source { color: var(--accent2); flex-shrink: 0; }
+#script-console-log .console-line.console-error { color: var(--danger); }
+#script-console-log .console-empty { color: var(--muted); font-style: italic; }
 #editor-mobile-tools { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); align-items: center; gap: 6px; padding: 6px 8px; background: var(--glass); border: 1px solid var(--border); border-radius: 10px; z-index: 250; backdrop-filter: blur(12px); }
 .editor-mobile-hint { color: var(--muted); font-size: 0.72rem; white-space: nowrap; padding: 0 4px; }
 .toast {

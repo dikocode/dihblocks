@@ -122,6 +122,13 @@
   function makeApiFor(owner) {
     return {
       print: (...args) => console.log('[' + owner.name + ']', ...args),
+      printMessage: (msg) => {
+        if (global.App && App.console && typeof App.console.print === 'function') {
+          App.console.print(owner.name, msg, false);
+        } else {
+          console.log('[' + owner.name + ']', msg);
+        }
+      },
       notify: (msg) => (global.App && App.notify ? App.notify(String(msg)) : console.log(msg)),
       say: (t, msg) => { t._sayText = String(msg); t._sayTimer = 2200; },
 

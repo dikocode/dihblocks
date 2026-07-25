@@ -1415,6 +1415,7 @@ const App = {
       document.getElementById('canvas-wrap').classList.toggle('editor-active', state.editorMode);
     document.getElementById('editor-mobile-tools').classList.toggle('hidden', !state.editorMode);
     App.notify(state.editorMode ? '🛠 Editor mode ON' : '🎮 Play mode ON');
+    App.console.updateVisibility();
     },
     zoomIn() {
       setEditorZoom(state.editorZoom * 1.2);
@@ -1731,6 +1732,7 @@ const App = {
           state.currentMapId      = inserted.id;
           state.currentMapTitle   = inserted.title;
           state.currentMapCreator = state.user.username;
+          App.console.updateVisibility();
         }
       }
 
@@ -1768,6 +1770,7 @@ const App = {
       state.currentMapId      = data.id;
       state.currentMapTitle   = data.title;
       state.currentMapCreator = data.creator;
+      App.console.updateVisibility();
 
       if (!keepEditor) App.hub.hide();
       App.notify('🗺 Loaded: ' + data.title);
@@ -1794,7 +1797,75 @@ const App = {
       if (state.localPlayer) respawn(state.localPlayer);
     },
   },
+
+  /* ── Script console (creator-only, editor mode) ─────────── */
+  console: {
+    _lines: [],
+    _maxLines: 300,
+
+    isCreator() {
+      // Same ownership check used for the Update/Publish button: only the
+      // person who owns this map can see script debug output.
+      return !!(state.currentMapId && state.user &&
+        state.currentMapCreator === state.user.username);
+    },
+
+    // Called whenever editor mode toggles, or map ownership changes, to
+    // show/hide the Console button. Creator-only + editor-mode-only.
+    updateVisibility() {
+      const btn = document.getElementById('console-btn');
+      if (!btn) return;
+      const show = state.editorMode && App.console.isCreator();
+      btn.classList.toggle('hidden', !show);
+      // If the panel was open and the person is no longer eligible to see
+      // it (e.g. they left editor mode), close it too.
+      if (!show) {
+        document.getElementById('script-console').classList.add('hidden');
+      }
+    },
+
+    toggle() {
+      const panel = document.getElementById('script-console');
+      panel.classList.toggle('hidden');
+    },
+
+    clear() {
+      App.console._lines = [];
+      App.console._render();
+    },
+
+    // Print a message into the on-screen console panel. `source` is a short
+    // label (e.g. a Thing's name) shown before the message.
+    print(source, message, isError) {
+      const text = (typeof message === 'string') ? message : safeStringify(message);
+      App.console._lines.push({ source: String(source || ''), text, isError: !!isError });
+      if (App.console._lines.length > App.console._maxLines) {
+        App.console._lines.splice(0, App.console._lines.length - App.console._maxLines);
+      }
+      App.console._render();
+    },
+
+    _render() {
+      const log = document.getElementById('script-console-log');
+      if (!log) return;
+      if (!App.console._lines.length) {
+        log.innerHTML = '<div class="console-empty">No messages yet. Use print_message(...) in a Thing\'s script.</div>';
+        return;
+      }
+      const wasAtBottom = (log.scrollTop + log.clientHeight) >= (log.scrollHeight - 4);
+      log.innerHTML = App.console._lines.map(l =>
+        '<div class="console-line' + (l.isError ? ' console-error' : '') + '">' +
+        '<span class="console-source">[' + escapeHtml(l.source) + ']</span>' +
+        '<span>' + escapeHtml(l.text) + '</span></div>'
+      ).join('');
+      if (wasAtBottom) log.scrollTop = log.scrollHeight;
+    },
+  },
 };
+
+function safeStringify(v) {
+  try { return JSON.stringify(v); } catch { return String(v); }
+}
 
 /* ══════════════════════════════════════════════════════════
    EDITOR CANVAS EVENTS

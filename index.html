@@ -124,6 +124,18 @@
       <div id="player-count">0 players</div>
       <div id="notification-area"></div>
 
+      <!-- Script console (creator-only, editor mode) -->
+      <div id="script-console" class="hidden" aria-label="Script console">
+        <div id="script-console-header">
+          <span>🖥 Console</span>
+          <div id="script-console-actions">
+            <button type="button" class="btn btn-ghost btn-icon" title="Clear" onclick="App.console.clear()">🗑</button>
+            <button type="button" class="btn btn-ghost btn-icon" title="Close" onclick="App.console.toggle()">✕</button>
+          </div>
+        </div>
+        <div id="script-console-log"></div>
+      </div>
+
       <!-- Editor viewport controls -->
       <div id="editor-controls" class="hidden" aria-label="Editor view controls">
         <button class="btn btn-ghost btn-icon" type="button" title="Zoom out" aria-label="Zoom out"
@@ -134,6 +146,8 @@
                 onclick="App.editor.zoomIn()">+</button>
         <button class="btn btn-secondary btn-sm" type="button" title="Center map"
                 onclick="App.editor.centerView()">Center</button>
+        <button class="btn btn-ghost btn-sm hidden" type="button" id="console-btn"
+                title="Show script output" onclick="App.console.toggle()">🖥 Console</button>
       </div>
 
       <!-- Compact mobile editor controls -->

@@ -58,6 +58,7 @@
     'distance': 'api.distance', 'dist': 'api.distance',
     'angle_to': 'api.angleTo', 'angleTo': 'api.angleTo',
     'clamp': 'api.clamp',
+    'print_message': 'api.printMessage',
   };
 
   function tokensToExpr(tokens) {
@@ -413,6 +414,13 @@
       return 'api.print(' + args.join(', ') + ');';
     },
     log(rest) { return KEYWORDS.print(rest); },
+    print_message(rest) {
+      // print_message X  -- shows up in the in-game Console panel
+      // (visible to the map's creator only), unlike `print` which only
+      // goes to the browser dev console.
+      const args = joinArgs(rest);
+      return 'api.printMessage(' + (args[0] || '""') + ');';
+    },
 
     // Visuals
     colour(rest) { return 'api.setColour(self, ' + tokensToExpr(rest) + ');'; },
