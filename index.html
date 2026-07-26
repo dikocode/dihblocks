@@ -148,6 +148,20 @@
                 onclick="App.editor.centerView()">Center</button>
         <button class="btn btn-ghost btn-sm hidden" type="button" id="console-btn"
                 title="Show script output" onclick="App.console.toggle()">🖥 Console</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="explorer-btn"
+                title="Show Explorer" onclick="App.explorer.toggle()">🌳 Explorer</button>
+      </div>
+
+      <!-- Explorer panel: tree view of map contents (tiles w/ scripts, Things, players) -->
+      <div id="explorer-panel" class="hidden" aria-label="Explorer">
+        <div id="explorer-header">
+          <span>🌳 Explorer</span>
+          <div id="explorer-actions">
+            <button type="button" class="btn btn-ghost btn-icon" title="Refresh" onclick="App.explorer.refresh()">⟳</button>
+            <button type="button" class="btn btn-ghost btn-icon" title="Close" onclick="App.explorer.toggle()">✕</button>
+          </div>
+        </div>
+        <div id="explorer-tree"></div>
       </div>
 
       <!-- Compact mobile editor controls -->
@@ -188,9 +202,42 @@
         <button class="tile-btn" data-tile="thing" onclick="App.editor.selectTile('thing',this)">
           <span class="tile-color" style="background:linear-gradient(45deg,#e94560,#f5a623)"></span> Thing (scripted)
         </button>
+        <button class="tile-btn" data-tile="script" onclick="App.editor.selectTile('script',this)">
+          <span class="tile-color" style="background:linear-gradient(45deg,#2ecc71,#4a9eff)"></span> 🖊 Script Tile
+        </button>
         <button class="tile-btn" data-tile="erase" onclick="App.editor.selectTile('erase',this)">
           <span class="tile-color" style="background:#333"></span> Erase
         </button>
+        <hr style="border-color:var(--border);margin:4px 0"/>
+        <h4 style="margin-top:0">Custom Slots</h4>
+        <div id="slot-grid" class="slot-grid"></div>
+        <div class="muted small" style="margin-top:4px">Open a Thing's editor, then click an empty slot to save it. Right-click a slot to clear it.</div>
+
+        <hr style="border-color:var(--border);margin:4px 0"/>
+        <h4 style="margin-top:0">Background</h4>
+        <select id="bg-preset-select" class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:6px"
+                onchange="App.background.setPreset(this.value)">
+          <option value="day">☀️ Day</option>
+          <option value="night" selected>🌙 Night</option>
+          <option value="rainy">🌧 Rainy</option>
+          <option value="sunset">🌇 Sunset</option>
+          <option value="sunrise">🌅 Sunrise</option>
+        </select>
+        <label style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--muted)">
+          Hue <span id="bg-hue-label">0°</span>
+        </label>
+        <input type="range" id="bg-hue-slider" min="-180" max="180" step="1" value="0"
+               style="width:100%" oninput="App.background.setHue(this.value)"/>
+        <label style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--muted)">
+          Saturation <span id="bg-sat-label">100%</span>
+        </label>
+        <input type="range" id="bg-sat-slider" min="0" max="2" step="0.05" value="1"
+               style="width:100%" oninput="App.background.setSat(this.value)"/>
+        <label style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--muted)">
+          Brightness <span id="bg-light-label">100%</span>
+        </label>
+        <input type="range" id="bg-light-slider" min="0" max="2" step="0.05" value="1"
+               style="width:100%" oninput="App.background.setLight(this.value)"/>
         <hr style="border-color:var(--border);margin:4px 0"/>
         <button class="btn btn-success btn-sm" onclick="App.modals.openSaveMap()" style="width:100%">💾 Save Map</button>
         <button class="btn btn-ghost btn-sm"   onclick="App.editor.clearMap()"    style="width:100%;margin-top:4px">🗑 Clear</button>
@@ -439,8 +486,50 @@ on 'boom':
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════
+     MODAL: TILE SCRIPT EDITOR (any regular tile — platform, ground, etc.)
+══════════════════════════════════════════════════════ -->
+<div id="tile-script-modal" class="modal-overlay hidden">
+  <div class="modal" style="width:min(700px,100%)">
+    <div class="modal-header">
+      <h3 id="tile-script-title">📜 Tile script</h3>
+      <button class="modal-close" onclick="TileScripts.closeEditor()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+      <div class="field">
+        <label>Language</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label><input type="radio" name="tile-script-lang" value="pyfork" checked/> Pyfork (Python-ish)</label>
+          <label><input type="radio" name="tile-script-lang" value="js"/> JavaScript</label>
+          <span class="muted small">Same engine as Things — see keyword list in THINGS_README.md.</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Script</label>
+        <textarea id="tile-script-source" rows="14" spellcheck="false"
+          style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:#0f1224;color:#dfe7ff;border:1px solid var(--border);border-radius:6px;padding:10px"
+placeholder="# Tile script demo
+on_touch player:
+    notify 'Stepped on a scripted tile!'
+    trigger 'switch_on'
+
+on 'switch_on':
+    tag 'active'
+"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="TileScripts.clearCurrent()">🗑 Clear script</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost" onclick="TileScripts.closeEditor()">Cancel</button>
+      <button class="btn btn-primary" onclick="TileScripts.saveCurrent()">Save script</button>
+    </div>
+  </div>
+</div>
+
 <script src="pyfork.js"></script>
 <script src="things.js"></script>
+<script src="tilescripts.js"></script>
 
 </body>
 </html>

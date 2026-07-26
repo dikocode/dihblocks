@@ -612,13 +612,26 @@
       return '/* tile: bad syntax */';
     },
     camera(rest) {
-      // camera to X Y   OR   camera follow player
+      // camera to X Y | camera follow player | camera zoom N |
+      // camera shake N | camera free | camera reset
       if (rest[0] && rest[0].v === 'follow') {
         return 'api.cameraFollow(' + (rest[1]?tokensToExpr(rest.slice(1)):'player') + ');';
       }
       if (rest[0] && rest[0].v === 'to') {
         const args = joinArgs(rest.slice(1));
         return 'api.cameraTo(' + args[0] + ', ' + args[1] + ');';
+      }
+      if (rest[0] && rest[0].v === 'zoom') {
+        return 'api.cameraZoom(' + tokensToExpr(rest.slice(1)) + ');';
+      }
+      if (rest[0] && rest[0].v === 'shake') {
+        return 'api.cameraShake(' + (rest.length>1?tokensToExpr(rest.slice(1)):'10') + ');';
+      }
+      if (rest[0] && rest[0].v === 'free') {
+        return 'api.cameraFree();';
+      }
+      if (rest[0] && rest[0].v === 'reset') {
+        return 'api.cameraReset();';
       }
       return '/* camera: bad syntax */';
     },

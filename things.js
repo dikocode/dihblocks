@@ -320,14 +320,39 @@
         }
       },
       cameraFollow: (target) => {
-        if (!global.state || !target) return;
-        state.camera.x = target.x - innerWidth/2;
-        state.camera.y = target.y - innerHeight/2;
+        if (!global.state) return;
+        state.camera.mode = 'target';
+        state.camera.targetRef = (target && typeof target === 'object') ? target : null;
+        if (!state.camera.targetRef) {
+          // Fallback: treat as a one-off point if not a live object.
+          state.camera.mode = 'follow';
+        }
       },
       cameraTo: (x, y) => {
         if (!global.state) return;
-        state.camera.x = Number(x)||0;
-        state.camera.y = Number(y)||0;
+        state.camera.mode = 'target';
+        state.camera.targetRef = null;
+        state.camera.targetX = Number(x) || 0;
+        state.camera.targetY = Number(y) || 0;
+      },
+      cameraZoom: (z) => {
+        if (!global.state) return;
+        state.camera.zoom = Math.max(0.2, Math.min(4, Number(z) || 1));
+      },
+      cameraShake: (mag) => {
+        if (!global.state) return;
+        state.camera.shakeMag = Math.max(0, Number(mag) || 10);
+        state.camera.shakeUntil = state.animTime + 400;
+      },
+      cameraFree: () => {
+        if (!global.state) return;
+        state.camera.mode = 'free';
+      },
+      cameraReset: () => {
+        if (!global.state) return;
+        state.camera.mode = 'follow';
+        state.camera.targetRef = null;
+        state.camera.zoom = 1;
       },
       setBackground: (c) => { Things._bg = String(c||''); },
       setMusic: (url) => {
@@ -654,6 +679,7 @@
     selectedIsNew = false; // saved successfully, so it's no longer "new/unsaved"
     closeEditor();
     if (global.App && App.notify) App.notify('✨ Thing saved');
+    if (global.App && App.explorer && App.explorer.open) App.explorer.refresh();
   }
 
   function deleteCurrent() {
@@ -663,6 +689,7 @@
     detachThingFromBus(selectedThing);
     selectedIsNew = false; // already removed above; closeEditor shouldn't remove it again
     closeEditor();
+    if (global.App && App.explorer && App.explorer.open) App.explorer.refresh();
   }
 
   function showCompiled() {
@@ -705,6 +732,26 @@
     });
   }
 
+  // ── Slot system support ───────────────────────────────────
+  // Export a plain-data spec of a Thing (for saving into a palette slot).
+  function exportSpec(t) {
+    return {
+      name: t.name, size: t.size, width: t.width, height: t.height,
+      colour: t.colour, texture: t.texture, physics: t.physics,
+      language: t.language, script: t.script, tag: t.tag,
+      hp: t.hp, maxHp: t.maxHp,
+    };
+  }
+
+  // Stamp a new Thing at (wx, wy) using a saved slot spec.
+  function spawnFromPreset(spec, wx, wy) {
+    const t = makeThing({ ...spec, x: wx, y: wy });
+    things.push(t);
+    loadImageInto(t);
+    compileThing(t);
+    return t;
+  }
+
   // ── Persistence (called from app.js applyMapData / saveCurrentMap) ──
   function serialize() {
     return things.map(t => ({
@@ -730,6 +777,7 @@
 
   // Utility hook other code can call.
   function forEach(fn) { for (const t of things) if (!t._dead) fn(t); }
+  function getSelected() { return selectedThing; }
 
   // ── Public ───────────────────────────────────────────────
   global.Things = {
@@ -739,6 +787,8 @@
     deleteAt,
     serialize, loadAll,
     forEach,
+    getSelected,
+    exportSpec, spawnFromPreset,
     trigger: fireEvent,
     _flash: null,
     _bg: null,

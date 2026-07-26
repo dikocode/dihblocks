@@ -103,7 +103,7 @@ function buildDefaultMap() {
   }
   // Spawn
   tiles.push({ x: 3, y: 25, type: 'spawn' });
-  return { tiles, width: Number.POSITIVE_INFINITY, height: Number.POSITIVE_INFINITY, name: 'Parkour Base' };
+  return { tiles, width: Number.POSITIVE_INFINITY, height: Number.POSITIVE_INFINITY, name: 'Parkour Base', background: { name: 'night', hue: 0, sat: 1, light: 1 } };
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -120,6 +120,69 @@ const TILE_CONFIG = {
 };
 
 /* ══════════════════════════════════════════════════════════
+   BACKGROUNDS (sky presets)
+══════════════════════════════════════════════════════════ */
+const BACKGROUNDS = {
+  day:     { label: '☀️ Day',     stops: ['#4a9eff', '#bfe6ff'], stars: false, rain: false },
+  night:   { label: '🌙 Night',   stops: ['#1a1a3e', '#0f2060'], stars: true,  rain: false },
+  rainy:   { label: '🌧 Rainy',   stops: ['#3a4552', '#5c6b7a'], stars: false, rain: true  },
+  sunset:  { label: '🌇 Sunset',  stops: ['#ff7e5f', '#4b2e63'], stars: false, rain: false },
+  sunrise: { label: '🌅 Sunrise', stops: ['#ffd89b', '#6a8caf'], stars: false, rain: false },
+};
+
+// Convert a hex colour to HSL, apply hue-shift (deg) / saturation & lightness
+// multipliers, and return a hex colour. Used to let players "tint" any preset.
+function hexToHsl(hex) {
+  hex = hex.replace('#', '');
+  const r = parseInt(hex.substr(0,2),16) / 255;
+  const g = parseInt(hex.substr(2,2),16) / 255;
+  const b = parseInt(hex.substr(4,2),16) / 255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h, s, l = (max+min)/2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g-b)/d + (g < b ? 6 : 0); break;
+      case g: h = (b-r)/d + 2; break;
+      default: h = (r-g)/d + 4;
+    }
+    h *= 60;
+  }
+  return { h, s, l };
+}
+function hslToHex(h, s, l) {
+  h = ((h % 360) + 360) % 360;
+  s = Math.max(0, Math.min(1, s));
+  l = Math.max(0, Math.min(1, l));
+  const c = (1 - Math.abs(2*l - 1)) * s;
+  const x = c * (1 - Math.abs((h/60) % 2 - 1));
+  const m = l - c/2;
+  let r,g,b;
+  if      (h < 60)  { r=c; g=x; b=0; }
+  else if (h < 120) { r=x; g=c; b=0; }
+  else if (h < 180) { r=0; g=c; b=x; }
+  else if (h < 240) { r=0; g=x; b=c; }
+  else if (h < 300) { r=x; g=0; b=c; }
+  else              { r=c; g=0; b=x; }
+  const toHex = v => Math.round((v+m)*255).toString(16).padStart(2,'0');
+  return '#' + toHex(r) + toHex(g) + toHex(b);
+}
+function tintColor(hex, hueShiftDeg, satMul, lightMul) {
+  const { h, s, l } = hexToHsl(hex);
+  return hslToHex(h + (hueShiftDeg||0), s * (satMul!=null?satMul:1), l * (lightMul!=null?lightMul:1));
+}
+
+// Resolve the map's active background config (name + tint), applying tint to stops.
+function getActiveBackground() {
+  const bgState = (state.map && state.map.background) || { name: 'night', hue: 0, sat: 1, light: 1 };
+  const preset = BACKGROUNDS[bgState.name] || BACKGROUNDS.night;
+  const stops = preset.stops.map(c => tintColor(c, bgState.hue || 0, bgState.sat != null ? bgState.sat : 1, bgState.light != null ? bgState.light : 1));
+  return { ...preset, stops };
+}
+
+/* ══════════════════════════════════════════════════════════
    GAME STATE
 ══════════════════════════════════════════════════════════ */
 const state = {
@@ -128,7 +191,7 @@ const state = {
   tileMap:   {},     // "x,y" → tile
   players:   {},     // sessionId → RemotePlayer
   sessionId: crypto.randomUUID(),
-  camera:    { x: 0, y: 0 },
+  camera:    { x: 0, y: 0, mode: 'follow', targetRef: null, targetX: 0, targetY: 0, zoom: 1, shakeMag: 0, shakeUntil: 0 },
   localPlayer: null,
   channel:   null,
   lastSyncTime: 0,
@@ -167,6 +230,7 @@ const state = {
 function rebuildTileMap() {
   state.tileMap = {};
   for (const t of state.map.tiles) state.tileMap[`${t.x},${t.y}`] = t;
+  if (window.App && App.explorer && App.explorer.open) App.explorer.refresh();
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -481,6 +545,23 @@ function drawSpeechBubble(ctx, x, y, text) {
 
 /* ── Tile Renderer ──────────────────────────────────────── */
 function drawTile(ctx, tile, sx, sy) {
+  drawTileBody(ctx, tile, sx, sy);
+  // Small script indicator badge, editor-mode only, so scripted tiles are
+  // easy to spot without cluttering normal play.
+  if (state.editorMode && window.TileScripts && window.TileScripts.hasScript(tile)) {
+    const S = TILE_SIZE;
+    ctx.fillStyle = 'rgba(46,204,113,0.9)';
+    ctx.beginPath();
+    ctx.arc(sx + S - 7, sy + 7, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0a0d1e';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('📜', sx + S - 7, sy + 10);
+  }
+}
+
+function drawTileBody(ctx, tile, sx, sy) {
   const cfg = TILE_CONFIG[tile.type] || TILE_CONFIG.platform;
   const S   = TILE_SIZE;
 
@@ -592,6 +673,10 @@ function tileAt(tx, ty) {
 function solidAt(tx, ty) {
   const t = tileAt(tx, ty);
   if (!t) return false;
+  if (window.TileScripts) {
+    const ov = window.TileScripts.solidOverride(t);
+    if (ov != null) return ov;
+  }
   return TILE_CONFIG[t.type]?.solid || false;
 }
 
@@ -692,15 +777,18 @@ function checkHazards(p) {
   const tx1 = Math.floor((p.x+p.w-4) / TILE_SIZE);
   const ty0 = Math.floor((p.y+4) / TILE_SIZE);
   const ty1 = Math.floor((p.y+p.h-4) / TILE_SIZE);
+  const scriptedTouching = [];
+  let hazardHit = false;
   for (let tx = tx0; tx <= tx1; tx++) {
     for (let ty = ty0; ty <= ty1; ty++) {
       const t = tileAt(tx, ty);
-      if (t && TILE_CONFIG[t.type]?.hazard) {
-        die(p);
-        return;
-      }
+      if (!t) continue;
+      if (TILE_CONFIG[t.type]?.hazard) hazardHit = true;
+      if (window.TileScripts && window.TileScripts.hasScript(t)) scriptedTouching.push(t);
     }
   }
+  if (window.TileScripts) window.TileScripts.updateTouch(scriptedTouching);
+  if (hazardHit) die(p);
 }
 
 function die(p) {
@@ -848,6 +936,7 @@ function gameLoop(ts) {
     // Physics
     resolvePlayerPhysics(p, deltaTime);
     if (window.Things) window.Things.update(deltaTime, p);
+    if (window.TileScripts) window.TileScripts.update(deltaTime);
 
     // Chat timer
     if (p.chatTimer > 0) p.chatTimer -= deltaTime * 1000;
@@ -864,11 +953,42 @@ function gameLoop(ts) {
 
   // ── Camera ──
   if (!state.editorMode) {
-    const camTargetX = p.x + p.w/2 - canvas.width/2;
-    const camTargetY = p.y + p.h/2 - canvas.height/2;
-    const cameraLerp = 1 - Math.exp(-CAMERA_LERP_RATE * deltaTime);
-    state.camera.x += (camTargetX - state.camera.x) * cameraLerp;
-    state.camera.y += (camTargetY - state.camera.y) * cameraLerp;
+    const cam = state.camera;
+    const zoom = cam.zoom || 1;
+    const viewW = canvas.width / zoom;
+    const viewH = canvas.height / zoom;
+    const cameraLerp = 1 - Math.exp(-(cam.lerpRate || CAMERA_LERP_RATE) * deltaTime);
+
+    if (cam.mode === 'free') {
+      // Script has full manual control (camera.x/y set directly via api) — do nothing here.
+    } else {
+      let camTargetX, camTargetY;
+      if (cam.mode === 'target') {
+        // Following a scripted world-point or object (camera.targetRef, refreshed each frame).
+        const ref = cam.targetRef;
+        const tx = ref ? (ref.x != null ? ref.x : cam.targetX) : cam.targetX;
+        const ty = ref ? (ref.y != null ? ref.y : cam.targetY) : cam.targetY;
+        camTargetX = tx - viewW/2;
+        camTargetY = ty - viewH/2;
+      } else {
+        // Default: follow the local player.
+        camTargetX = p.x + p.w/2 - viewW/2;
+        camTargetY = p.y + p.h/2 - viewH/2;
+      }
+      cam.x += (camTargetX - cam.x) * cameraLerp;
+      cam.y += (camTargetY - cam.y) * cameraLerp;
+    }
+
+    // Screen shake (additive offset, doesn't affect the underlying camera position).
+    if (cam.shakeUntil > state.animTime && cam.shakeMag > 0) {
+      const remaining = (cam.shakeUntil - state.animTime) / 1000;
+      const mag = cam.shakeMag * Math.max(0, remaining);
+      cam.shakeOffsetX = (Math.random()*2-1) * mag;
+      cam.shakeOffsetY = (Math.random()*2-1) * mag;
+    } else {
+      cam.shakeOffsetX = 0;
+      cam.shakeOffsetY = 0;
+    }
   }
   clampCamera();
 
@@ -894,32 +1014,58 @@ function gameLoop(ts) {
 function renderFrame(localP) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Sky gradient
+  const bg = getActiveBackground();
+
+  // Sky gradient (script override via Things._bg takes priority, back-compat)
   const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  sky.addColorStop(0, '#1a1a3e');
-  sky.addColorStop(1, '#0f2060');
+  if (window.Things && Things._bg) {
+    sky.addColorStop(0, Things._bg);
+    sky.addColorStop(1, Things._bg);
+  } else {
+    sky.addColorStop(0, bg.stops[0]);
+    sky.addColorStop(1, bg.stops[1]);
+  }
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Parallax stars
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  const sr = 137.5 + state.camera.x * 0.02;
-  for (let i = 0; i < 60; i++) {
-    const sx = ((i*sr*1.7) % canvas.width);
-    const sy = ((i*sr*2.3) % canvas.height);
-    const br = (Math.sin(state.animTime*0.001 + i) * 0.5 + 0.5);
-    ctx.globalAlpha = br * 0.5;
-    ctx.fillRect(sx, sy, 1.5, 1.5);
+  // Parallax stars (night only)
+  if (bg.stars) {
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    const sr = 137.5 + state.camera.x * 0.02;
+    for (let i = 0; i < 60; i++) {
+      const sx = ((i*sr*1.7) % canvas.width);
+      const sy = ((i*sr*2.3) % canvas.height);
+      const br = (Math.sin(state.animTime*0.001 + i) * 0.5 + 0.5);
+      ctx.globalAlpha = br * 0.5;
+      ctx.fillRect(sx, sy, 1.5, 1.5);
+    }
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
 
-  const zoom = state.editorMode ? state.editorZoom : 1;
+  // Rain effect
+  if (bg.rain) {
+    ctx.strokeStyle = 'rgba(200,220,255,0.35)';
+    ctx.lineWidth = 1;
+    const rr = 97.3;
+    for (let i = 0; i < 80; i++) {
+      const rx = ((i*rr*1.3 + state.animTime*0.25) % (canvas.width + 40)) - 20;
+      const ry = ((i*rr*2.1 + state.animTime*0.6) % (canvas.height + 40)) - 20;
+      ctx.beginPath();
+      ctx.moveTo(rx, ry);
+      ctx.lineTo(rx - 4, ry + 14);
+      ctx.stroke();
+    }
+  }
+
+  const zoom = state.editorMode ? state.editorZoom : (state.camera.zoom || 1);
   const viewWidth = canvas.width / zoom;
   const viewHeight = canvas.height / zoom;
+  const shakeX = state.editorMode ? 0 : (state.camera.shakeOffsetX || 0);
+  const shakeY = state.editorMode ? 0 : (state.camera.shakeOffsetY || 0);
 
   ctx.save();
   ctx.scale(zoom, zoom);
-  ctx.translate(-state.camera.x, -state.camera.y);
+  ctx.translate(-state.camera.x + shakeX, -state.camera.y + shakeY);
 
   // ── Tiles ──
   const vx0 = Math.floor(state.camera.x / TILE_SIZE) - 1;
@@ -1123,6 +1269,17 @@ function editorCanvasClick(e, isRight) {
   }
   if (state.editorTile === 'thing') {
     if (window.Things) window.Things.openEditorAt(tx * TILE_SIZE, ty * TILE_SIZE);
+    return;
+  }
+  if (typeof state.editorTile === 'string' && state.editorTile.startsWith('slot:')) {
+    const i = Number(state.editorTile.split(':')[1]);
+    App.slots.stamp(i, tx * TILE_SIZE, ty * TILE_SIZE);
+    return;
+  }
+  if (state.editorTile === 'script') {
+    const t = tileAt(tx, ty);
+    if (t && window.TileScripts) window.TileScripts.openEditorFor(t);
+    else App.notify('⚠ No tile here to script — place a tile first');
     return;
   }
   if (state.editorTile === 'erase') {
@@ -1407,6 +1564,7 @@ const App = {
       document.getElementById('mode-badge').style.background = state.editorMode ? '#e74c3c' : 'var(--accent)';
       if (state.editorMode) {
         centerEditorView();
+        App.slots.render();
       } else {
         state.editorZoom = 1;
       }
@@ -1451,6 +1609,264 @@ const App = {
         btn.classList.toggle('btn-ghost', !isPaint);
       }
       App.notify(state.editorTouchMode === 'paint' ? '🖌 Paint mode: drag to place tiles' : '✋ Pan mode: drag to scroll');
+    },
+  },
+
+  /* ── Explorer (Roblox-style tree view of map contents) ──── */
+  explorer: {
+    open: false,
+    selectedId: null,
+
+    toggle() {
+      App.explorer.open = !App.explorer.open;
+      document.getElementById('explorer-panel').classList.toggle('hidden', !App.explorer.open);
+      if (App.explorer.open) App.explorer.refresh();
+    },
+
+    jumpTo(worldX, worldY) {
+      const vw = getEditorViewportSize();
+      state.camera.x = worldX - vw.w / 2;
+      state.camera.y = worldY - vw.h / 2;
+      clampCamera();
+    },
+
+    selectThing(id, x, y) {
+      App.explorer.selectedId = 'thing:' + id;
+      App.explorer.jumpTo(x, y);
+      if (window.Things) window.Things.openEditorAt(x, y);
+      App.explorer.refresh();
+    },
+
+    selectScriptedTile(tx, ty) {
+      App.explorer.selectedId = 'tile:' + tx + ',' + ty;
+      App.explorer.jumpTo(tx * TILE_SIZE, ty * TILE_SIZE);
+      const t = tileAt(tx, ty);
+      if (t && window.TileScripts) window.TileScripts.openEditorFor(t);
+      App.explorer.refresh();
+    },
+
+    refresh() {
+      const el = document.getElementById('explorer-tree');
+      if (!el || !App.explorer.open) return;
+
+      const parts = [];
+
+      // ── Tiles, grouped by type (counts — too many to list individually) ──
+      const byType = {};
+      for (const t of state.map.tiles) byType[t.type] = (byType[t.type] || 0) + 1;
+      const typeKeys = Object.keys(byType).sort();
+      parts.push('<div class="explorer-group"><div class="explorer-group-label">Tiles (' + state.map.tiles.length + ')</div>');
+      if (!typeKeys.length) {
+        parts.push('<div class="explorer-empty">No tiles</div>');
+      } else {
+        for (const type of typeKeys) {
+          parts.push(
+            '<div class="explorer-node"><span class="explorer-icon">▦</span>' +
+            escapeHtml(type) + '<span class="explorer-script-badge">×' + byType[type] + '</span></div>'
+          );
+        }
+      }
+      parts.push('</div>');
+
+      // ── Scripted tiles (individually — the only tiles worth listing one by one) ──
+      const scriptedTiles = window.TileScripts
+        ? state.map.tiles.filter(t => window.TileScripts.hasScript(t))
+        : [];
+      parts.push('<div class="explorer-group"><div class="explorer-group-label">Scripted Tiles (' + scriptedTiles.length + ')</div>');
+      if (!scriptedTiles.length) {
+        parts.push('<div class="explorer-empty">No scripted tiles</div>');
+      } else {
+        for (const t of scriptedTiles) {
+          const isSel = App.explorer.selectedId === ('tile:' + t.x + ',' + t.y);
+          parts.push(
+            '<div class="explorer-node' + (isSel ? ' selected' : '') + '" ' +
+            'onclick="App.explorer.selectScriptedTile(' + t.x + ',' + t.y + ')">' +
+            '<span class="explorer-icon">▦</span>' + escapeHtml(t.type) + ' (' + t.x + ',' + t.y + ')' +
+            '<span class="explorer-script-badge">📜 ' + escapeHtml(t.language || 'pyfork') + '</span>' +
+            '</div>'
+          );
+        }
+      }
+      parts.push('</div>');
+
+      // ── Things (individually — these are scriptable) ──
+      const thingsList = [];
+      if (window.Things && typeof window.Things.forEach === 'function') {
+        window.Things.forEach(t => thingsList.push(t));
+      }
+      parts.push('<div class="explorer-group"><div class="explorer-group-label">Things (' + thingsList.length + ')</div>');
+      if (!thingsList.length) {
+        parts.push('<div class="explorer-empty">No Things placed</div>');
+      } else {
+        for (const t of thingsList) {
+          const hasScript = t.script && t.script.trim().length > 0;
+          const isSel = App.explorer.selectedId === ('thing:' + t.id);
+          parts.push(
+            '<div class="explorer-node' + (isSel ? ' selected' : '') + '" ' +
+            'onclick="App.explorer.selectThing(' + JSON.stringify(t.id) + ',' + t.x + ',' + t.y + ')">' +
+            '<span class="explorer-icon">🧩</span>' + escapeHtml(t.name || 'Thing') +
+            (hasScript ? '<span class="explorer-script-badge">📜 ' + escapeHtml(t.language || 'pyfork') + '</span>' : '') +
+            '</div>'
+          );
+        }
+      }
+      parts.push('</div>');
+
+      // ── Players (live) ──
+      const allPlayers = [];
+      if (state.localPlayer) allPlayers.push({ name: (state.user && state.user.username) || 'You', x: state.localPlayer.x, y: state.localPlayer.y, local: true });
+      for (const id in state.players) {
+        const p = state.players[id];
+        allPlayers.push({ name: p.username || 'Player', x: p.x, y: p.y, local: false });
+      }
+      parts.push('<div class="explorer-group"><div class="explorer-group-label">Players (' + allPlayers.length + ')</div>');
+      if (!allPlayers.length) {
+        parts.push('<div class="explorer-empty">No players online</div>');
+      } else {
+        for (const p of allPlayers) {
+          parts.push(
+            '<div class="explorer-node" onclick="App.explorer.jumpTo(' + p.x + ',' + p.y + ')">' +
+            '<span class="explorer-icon">' + (p.local ? '🟢' : '🔵') + '</span>' + escapeHtml(p.name) +
+            '</div>'
+          );
+        }
+      }
+      parts.push('</div>');
+
+      el.innerHTML = parts.join('');
+    },
+  },
+
+  /* ── Background (sky presets + tint) ─────────────────────── */
+  background: {
+    setPreset(name) {
+      if (!state.map.background) state.map.background = { name: 'night', hue: 0, sat: 1, light: 1 };
+      state.map.background.name = name;
+      App.notify('🎨 Background: ' + (BACKGROUNDS[name] ? BACKGROUNDS[name].label : name));
+    },
+    setHue(val) {
+      if (!state.map.background) state.map.background = { name: 'night', hue: 0, sat: 1, light: 1 };
+      state.map.background.hue = Number(val) || 0;
+      const lbl = document.getElementById('bg-hue-label');
+      if (lbl) lbl.textContent = state.map.background.hue + '°';
+    },
+    setSat(val) {
+      if (!state.map.background) state.map.background = { name: 'night', hue: 0, sat: 1, light: 1 };
+      state.map.background.sat = Number(val);
+      const lbl = document.getElementById('bg-sat-label');
+      if (lbl) lbl.textContent = Math.round(state.map.background.sat * 100) + '%';
+    },
+    setLight(val) {
+      if (!state.map.background) state.map.background = { name: 'night', hue: 0, sat: 1, light: 1 };
+      state.map.background.light = Number(val);
+      const lbl = document.getElementById('bg-light-label');
+      if (lbl) lbl.textContent = Math.round(state.map.background.light * 100) + '%';
+    },
+    // Sync the <select>/sliders to reflect state.map.background after a map load.
+    syncControls() {
+      const b = state.map.background || { name: 'night', hue: 0, sat: 1, light: 1 };
+      const sel = document.getElementById('bg-preset-select');
+      const hue = document.getElementById('bg-hue-slider');
+      const sat = document.getElementById('bg-sat-slider');
+      const light = document.getElementById('bg-light-slider');
+      if (sel) sel.value = b.name;
+      if (hue) hue.value = b.hue || 0;
+      if (sat) sat.value = b.sat != null ? b.sat : 1;
+      if (light) light.value = b.light != null ? b.light : 1;
+      const hueLbl = document.getElementById('bg-hue-label');
+      const satLbl = document.getElementById('bg-sat-label');
+      const lightLbl = document.getElementById('bg-light-label');
+      if (hueLbl) hueLbl.textContent = (b.hue || 0) + '°';
+      if (satLbl) satLbl.textContent = Math.round((b.sat != null ? b.sat : 1) * 100) + '%';
+      if (lightLbl) lightLbl.textContent = Math.round((b.light != null ? b.light : 1) * 100) + '%';
+    },
+  },
+
+  /* ── Custom slots (save a configured Thing as a reusable palette preset) ── */
+  slots: {
+    MAX_SLOTS: 8,
+    STORAGE_KEY: 'dihblocks_slots_v1',
+    selectedIndex: null, // slot currently chosen as the active editor tool
+
+    _load() {
+      try {
+        const raw = localStorage.getItem(App.slots.STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch (e) { return []; }
+    },
+    _save(list) {
+      try { localStorage.setItem(App.slots.STORAGE_KEY, JSON.stringify(list)); }
+      catch (e) { App.notify('⚠ Could not save slot (storage full or blocked)'); }
+    },
+
+    render() {
+      const el = document.getElementById('slot-grid');
+      if (!el) return;
+      const list = App.slots._load();
+      const parts = [];
+      for (let i = 0; i < App.slots.MAX_SLOTS; i++) {
+        const spec = list[i];
+        const filled = !!spec;
+        const isSel = App.slots.selectedIndex === i;
+        parts.push(
+          '<button type="button" class="slot-btn' + (filled ? ' filled' : '') + (isSel ? ' selected' : '') + '" ' +
+          'title="' + (filled ? escapeHtml(spec.name) + ' — click to place, right-click to clear' : 'Empty slot — save a Thing here') + '" ' +
+          'onclick="App.slots.use(' + i + ')" ' +
+          'oncontextmenu="App.slots.clear(' + i + ');return false;">' +
+          (filled
+            ? '<span class="slot-color" style="background:' + escapeHtml(spec.colour || '#e94560') + '"></span><span class="slot-label">' + escapeHtml(spec.name.slice(0,10)) + '</span>'
+            : '<span class="slot-plus">+</span>')
+          + '</button>'
+        );
+      }
+      el.innerHTML = parts.join('');
+    },
+
+    // Save whichever Thing is currently open in the editor modal into slot i.
+    saveCurrentThingToSlot(i) {
+      if (!window.Things || typeof Things.getSelected !== 'function') return;
+      const t = Things.getSelected();
+      if (!t) { App.notify('⚠ Open a Thing\'s editor first, then save it to a slot'); return; }
+      const list = App.slots._load();
+      list[i] = Things.exportSpec(t);
+      App.slots._save(list);
+      App.slots.render();
+      App.notify('💾 Saved "' + list[i].name + '" to slot ' + (i+1));
+    },
+
+    // Click a slot: if empty, prompt to save current Thing; if filled, select it as the active tool.
+    use(i) {
+      const list = App.slots._load();
+      if (!list[i]) {
+        App.slots.saveCurrentThingToSlot(i);
+        return;
+      }
+      App.slots.selectedIndex = i;
+      state.editorTile = 'slot:' + i;
+      document.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('selected'));
+      App.slots.render();
+      App.notify('🧩 Slot ' + (i+1) + ' selected — click the map to place "' + list[i].name + '"');
+    },
+
+    clear(i) {
+      const list = App.slots._load();
+      if (!list[i]) return;
+      const name = list[i].name;
+      list[i] = null;
+      App.slots._save(list);
+      if (App.slots.selectedIndex === i) App.slots.selectedIndex = null;
+      App.slots.render();
+      App.notify('🗑 Cleared slot ' + (i+1) + ' (' + name + ')');
+    },
+
+    // Stamp the preset from slot i at a world position.
+    stamp(i, wx, wy) {
+      const list = App.slots._load();
+      const spec = list[i];
+      if (!spec || !window.Things) return;
+      Things.spawnFromPreset(spec, wx, wy);
+      App.notify('🧩 Placed "' + spec.name + '"');
+      if (App.explorer && App.explorer.open) App.explorer.refresh();
     },
   },
 
@@ -1707,6 +2123,7 @@ const App = {
         tiles:  state.map.tiles,
         width:  Number.isFinite(state.map.width)  ? state.map.width  : null,
         height: Number.isFinite(state.map.height) ? state.map.height : null,
+        background: state.map.background || { name: 'night', hue: 0, sat: 1, light: 1 },
         things: (window.Things && typeof window.Things.serialize === 'function')
           ? window.Things.serialize()
           : [],
@@ -1789,10 +2206,22 @@ const App = {
       // Infinite world by default; only respect finite bounds if explicitly given.
       state.map.width  = (mapData.width  && Number.isFinite(mapData.width))  ? mapData.width  : Number.POSITIVE_INFINITY;
       state.map.height = (mapData.height && Number.isFinite(mapData.height)) ? mapData.height : Number.POSITIVE_INFINITY;
+      state.map.background = mapData.background || { name: 'night', hue: 0, sat: 1, light: 1 };
       rebuildTileMap();
+      // Reset any scripted camera state (mode/zoom/target/shake) from the
+      // previous map so a new map always starts on the default follow-cam.
+      state.camera.mode = 'follow';
+      state.camera.targetRef = null;
+      state.camera.zoom = 1;
+      state.camera.shakeMag = 0;
+      state.camera.shakeUntil = 0;
+      App.background && App.background.syncControls && App.background.syncControls();
       // Load things (scripted textured objects) if present.
       if (window.Things && typeof window.Things.loadAll === 'function') {
         window.Things.loadAll(mapData.things || []);
+      }
+      if (window.TileScripts && typeof window.TileScripts.recompileAll === 'function') {
+        window.TileScripts.recompileAll();
       }
       if (state.localPlayer) respawn(state.localPlayer);
     },
