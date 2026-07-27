@@ -623,6 +623,9 @@ label { font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; display:blo
   z-index: 200;
   backdrop-filter: blur(12px);
   min-width: 140px;
+  max-width: min(220px, calc(100vw - 16px));
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
 }
 #editor-palette h4 {
   font-size: 0.75rem;
@@ -630,7 +633,16 @@ label { font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; display:blo
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
+.palette-section { display: flex; flex-direction: column; gap: 6px; }
+.palette-section[open] > h4::after { content: '▾'; }
+.palette-section:not([open]) > h4::after { content: '▸'; }
+.palette-section > summary { list-style: none; }
+.palette-section > summary::-webkit-details-marker { display: none; }
 .tile-btn {
   display: flex;
   align-items: center;
@@ -892,10 +904,42 @@ label { font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; display:blo
   #topbar .topbar-actions .btn { padding: 6px 8px; font-size: 0.7rem; }
   #editor-controls { top: 44px; right: 8px; }
   #editor-controls .btn-secondary { display: none; }
+  #editor-controls #explorer-btn { display: none; } /* moved into editor-mobile-tools instead */
   #editor-mobile-tools { display: flex !important; bottom: 10px; max-width: calc(100% - 20px); }
   .editor-mobile-hint { display: none; }
   .game-home-header { align-items: flex-start; flex-direction: column; margin-bottom: 22px; }
   .game-home-actions { width: 100%; justify-content: stretch; }
   .game-home-actions .btn { flex: 1; }
   .game-home-shell { padding-top: 28px; }
+
+  /* Editor palette: hard cap so it never covers the whole canvas, and stays
+     scrollable/collapsible via the <details> sections instead of one long list. */
+  #editor-palette {
+    left: 6px; right: 6px; bottom: 44px;
+    max-width: none;
+    max-height: 42vh;
+    font-size: 0.9rem;
+  }
+  .tile-btn { padding: 9px 10px; } /* slightly larger tap target on touch */
+  .slot-grid { grid-template-columns: repeat(4, 1fr); }
+
+  /* Explorer: full-width sheet instead of a small floating box, so it
+     doesn't collide with editor-controls or get too cramped to use.
+     Stacked ABOVE the palette (not overlapping) since both can be open
+     at once in editor mode. */
+  #explorer-panel {
+    left: 6px; right: 6px; top: auto; bottom: calc(44px + 42vh + 6px);
+    width: auto;
+    max-height: 30vh;
+  }
+
+  /* Script console: keep it from overlapping the palette when both are open. */
+  #script-console { max-height: 32vh; }
+
+  /* Modals: single-column fields, roomier tap targets on narrow screens. */
+  .modal { max-height: 94vh; }
+  .modal-body [style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
+  .modal-footer { flex-wrap: wrap; gap: 8px; }
+  .modal-footer .btn { flex: 1 1 auto; }
 }
+

@@ -537,13 +537,12 @@
 
   // Delete a Thing at world coords (used by editor right-click).
   function deleteAt(wx, wy) {
-    for (let i = things.length - 1; i >= 0; i--) {
-      const t = things[i];
-      if (wx >= t.x && wx <= t.x + t.size && wy >= t.y && wy <= t.y + t.size) {
-        detachThingFromBus(t);
-        things.splice(i, 1);
-        return true;
-      }
+    const t = findThingAtPoint(wx, wy);
+    if (t) {
+      const i = things.indexOf(t);
+      things.splice(i, 1);
+      detachThingFromBus(t);
+      return true;
     }
     return false;
   }
@@ -552,11 +551,15 @@
   // Find an existing Thing whose bounding box contains the world point (wx, wy).
   function findThingAtPoint(wx, wy) {
     // Iterate in reverse so the most-recently-added (topmost) Thing wins.
+    // Things render with (x, y) as their TOP-LEFT corner (see render()), so
+    // the hit-test box must match that — not treat (x, y) as the center.
+    // A small touch-friendly padding is added so taps near the edge on
+    // mobile still register.
+    const TOUCH_PAD = (global.isMobile && global.isMobile()) ? 10 : 0;
     for (let i = things.length - 1; i >= 0; i--) {
       const t = things[i];
-      const half = t.size / 2;
-      if (wx >= t.x - half && wx <= t.x + half &&
-          wy >= t.y - half && wy <= t.y + half) {
+      if (wx >= t.x - TOUCH_PAD && wx <= t.x + t.size + TOUCH_PAD &&
+          wy >= t.y - TOUCH_PAD && wy <= t.y + t.size + TOUCH_PAD) {
         return t;
       }
     }
