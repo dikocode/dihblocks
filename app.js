@@ -334,6 +334,19 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Minus' || e.code === 'NumpadSubtract') setEditorZoom(state.editorZoom / 1.2);
   }
   if (e.code === 'KeyE' && gameIsActive && !e.repeat) App.dance();
+
+  // Ctrl+D / Cmd+D — switch to Select/Move mode in the editor. Browsers use
+  // this for "bookmark page", so we must preventDefault to actually capture it.
+  if (state.editorMode && e.code === 'KeyD' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    if (!e.repeat) {
+      const btn = document.querySelector("[data-tile='select']");
+      if (btn) {
+        App.editor.selectTile('select', btn);
+        App.notify('🖱 Select / Move mode (Ctrl+D)');
+      }
+    }
+  }
 });
 window.addEventListener('keyup', e => {
   // Clear the key even if focus moved into chat while it was held.
@@ -1267,6 +1280,10 @@ function editorCanvasClick(e, isRight) {
     }
     return;
   }
+  if (state.editorTile === 'select') {
+    App.selection.handleClick(mx, my, e);
+    return;
+  }
   if (state.editorTile === 'thing') {
     if (window.Things) window.Things.openEditorAt(tx * TILE_SIZE, ty * TILE_SIZE);
     return;
@@ -1566,6 +1583,7 @@ const App = {
         centerEditorView();
         App.slots.render();
       } else {
+        App.selection.clear();
         state.editorZoom = 1;
       }
       clampCamera();
@@ -1782,6 +1800,40 @@ const App = {
     },
   },
 
+  /* ── Select mode (click a Thing to select+highlight it; drag to move it;
+       click a slot while selected to save it there) ─────────────────── */
+  selection: {
+    thing: null, // the currently-selected Thing (persists across modal open/close)
+
+    get() { return App.selection.thing; },
+
+    clear() {
+      App.selection.thing = null;
+      App.slots.render(); // refresh so slot hints/labels reflect no selection
+    },
+
+    // Called from editorCanvasClick when the Select tool is active.
+    handleClick(mx, my, e) {
+      const wasDragging = state.isDragging;
+      if (wasDragging && App.selection.thing) {
+        // Dragging an already-selected Thing: move it to follow the cursor.
+        App.selection.thing.x = mx - App.selection.thing.size / 2;
+        App.selection.thing.y = my - App.selection.thing.size / 2;
+        return;
+      }
+      // Plain click (not a drag): try to select whatever Thing is under the cursor.
+      const hit = window.Things && typeof window.Things.findThingAtPoint === 'function'
+        ? window.Things.findThingAtPoint(mx, my)
+        : null;
+      if (hit) {
+        App.selection.thing = hit;
+        App.notify('🖱 Selected "' + (hit.name || 'Thing') + '" — drag to move, or tap a slot to save it');
+      } else {
+        App.selection.clear();
+      }
+    },
+  },
+
   /* ── Custom slots (save a configured Thing as a reusable palette preset) ── */
   slots: {
     MAX_SLOTS: 8,
@@ -1822,11 +1874,10 @@ const App = {
       el.innerHTML = parts.join('');
     },
 
-    // Save whichever Thing is currently open in the editor modal into slot i.
+    // Save whichever Thing is currently selected (via Select mode) into slot i.
     saveCurrentThingToSlot(i) {
-      if (!window.Things || typeof Things.getSelected !== 'function') return;
-      const t = Things.getSelected();
-      if (!t) { App.notify('⚠ Open a Thing\'s editor first, then save it to a slot'); return; }
+      const t = App.selection.thing;
+      if (!t) { App.notify('⚠ Select a Thing first (🖱 Select tool), then tap a slot to save it'); return; }
       const list = App.slots._load();
       list[i] = Things.exportSpec(t);
       App.slots._save(list);
@@ -1834,11 +1885,20 @@ const App = {
       App.notify('💾 Saved "' + list[i].name + '" to slot ' + (i+1));
     },
 
-    // Click a slot: if empty, prompt to save current Thing; if filled, select it as the active tool.
+    // Click a slot:
+    //  - If a Thing is currently selected (Select mode), ALWAYS save it here
+    //    (overwriting whatever was in the slot before) — this is the primary
+    //    "save" gesture now, not just for empty slots.
+    //  - Otherwise, if the slot is filled, select it as the active placement tool.
+    //  - Otherwise (empty slot, nothing selected), just hint how to save one.
     use(i) {
+      if (App.selection.thing) {
+        App.slots.saveCurrentThingToSlot(i);
+        return;
+      }
       const list = App.slots._load();
       if (!list[i]) {
-        App.slots.saveCurrentThingToSlot(i);
+        App.notify('⚠ Select a Thing first (🖱 Select tool), then tap this slot to save it');
         return;
       }
       App.slots.selectedIndex = i;

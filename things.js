@@ -533,6 +533,19 @@
       }
       ctx.restore();
     }
+
+    // Select-mode highlight ring around the currently selected Thing.
+    if (global.App && App.selection && App.selection.thing) {
+      const s = App.selection.thing;
+      if (things.indexOf(s) !== -1) { // still exists (not deleted)
+        ctx.save();
+        ctx.strokeStyle = '#4a9eff';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(s.x - 4, s.y - 4, s.size + 8, s.size + 8);
+        ctx.restore();
+      }
+    }
   }
 
   // Delete a Thing at world coords (used by editor right-click).
@@ -791,6 +804,7 @@
     serialize, loadAll,
     forEach,
     getSelected,
+    findThingAtPoint,
     exportSpec, spawnFromPreset,
     trigger: fireEvent,
     _flash: null,
